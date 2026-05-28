@@ -26,6 +26,9 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Prevent browser-level pinch-to-zoom globally — canvas has its own zoom */
+html { touch-action: pan-x pan-y; }
+
 body {
   font-family: var(--font);
   background: var(--bg);
@@ -858,6 +861,8 @@ body {
   background-size: 26px 26px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  /* pan-x pan-y: browser handles 1-finger scroll; pinch zoom goes to my script (not browser) */
+  touch-action: pan-x pan-y;
 }
 
 /* Canvas */

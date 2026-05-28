@@ -7,8 +7,22 @@ import GenericStage from './stages/GenericStage'
 import Lookbook from './stages/Lookbook'
 import { calculateProgress, exportCollectionJSON, exportMindMapSVG } from '../utils'
 
+const MindMapIcon = () => (
+  <svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor">
+    <circle cx="10" cy="10" r="2.5"/>
+    <line x1="8.2" y1="8.2" x2="4" y2="4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <circle cx="3" cy="3" r="1.8"/>
+    <line x1="11.8" y1="8.2" x2="16" y2="4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <circle cx="17" cy="3" r="1.8"/>
+    <line x1="8.2" y1="11.8" x2="4" y2="16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <circle cx="3" cy="17" r="1.8"/>
+    <line x1="11.8" y1="11.8" x2="16" y2="16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <circle cx="17" cy="17" r="1.8"/>
+  </svg>
+)
+
 const STAGES = [
-  { key: 'mindMap',      label: 'Mind Map',     icon: '⬡' },
+  { key: 'mindMap',      label: 'Mind Map',     icon: <MindMapIcon /> },
   { key: 'research',     label: 'Research',     icon: '◎' },
   { key: 'sketches',     label: 'Sketches',     icon: '✐' },
   { key: 'styleCards',   label: 'Style Cards',  icon: '⊟' },

@@ -28,22 +28,30 @@ export default function MindMap({ data, onChange }) {
   const [connectFrom, setConnectFrom] = useState(null)
   const [selected, setSelected]       = useState(null)
 
-  const canvasRef   = useRef(null)
-  const viewportRef = useRef(null)
-  const dragOffRef  = useRef({ x: 0, y: 0 })
-  const dataRef     = useRef(data)
-  const zoomRef     = useRef(zoom)
-  const selectedRef = useRef(null)
-  const pinchRef    = useRef(null)
-  const dragNodeRef = useRef(null) // DOM element currently being dragged
+  const canvasRef      = useRef(null)
+  const viewportRef    = useRef(null)
+  const dragOffRef     = useRef({ x: 0, y: 0 })
+  const dataRef        = useRef(data)
+  const zoomRef        = useRef(zoom)
+  const selectedRef    = useRef(null)
+  const pinchRef       = useRef(null)
 
-  // History for undo — persists across renders, never resets
+  // Always-current refs — avoids stale closures in event handlers
+  const onChangeRef    = useRef(onChange)
+  const dragStateRef   = useRef(null)   // mirrors dragState but never stale
+  const removeNodeRef  = useRef(null)
+  const removeEdgeRef  = useRef(null)
+  const undoRef        = useRef(null)
+
+  // History — persists across renders, never reset
   const histRef = useRef(null)
   if (!histRef.current) histRef.current = { stack: [data], idx: 0 }
 
-  useEffect(() => { dataRef.current = data },         [data])
-  useEffect(() => { zoomRef.current = zoom },         [zoom])
+  // Keep refs in sync every render
+  useEffect(() => { dataRef.current     = data },     [data])
+  useEffect(() => { zoomRef.current     = zoom },     [zoom])
   useEffect(() => { selectedRef.current = selected }, [selected])
+  useEffect(() => { onChangeRef.current = onChange }, [onChange])
 
   // ── History / undo ───────────────────────────────────────────
   function applyChange(newData) {
@@ -51,17 +59,46 @@ export default function MindMap({ data, onChange }) {
     const next = stack.slice(0, idx + 1).concat([newData])
     if (next.length > 60) next.shift()
     histRef.current = { stack: next, idx: next.length - 1 }
-    onChange(newData)
+    onChangeRef.current(newData)
   }
 
   function undo() {
     const h = histRef.current
     if (h.idx <= 0) return
     h.idx--
-    onChange(h.stack[h.idx])
+    onChangeRef.current(h.stack[h.idx])
   }
 
-  // ── Ctrl+Scroll zoom ─────────────────────────────────────────
+  // Update function refs every render so keyboard handlers never go stale
+  function removeNode(nodeId) {
+    applyChange({
+      ...dataRef.current,
+      nodes: dataRef.current.nodes.filter(n => n.id !== nodeId),
+      edges: dataRef.current.edges.filter(e => e.from !== nodeId && e.to !== nodeId),
+    })
+    setSelected(null); setConnectFrom(null)
+  }
+
+  function removeEdge(edgeId) {
+    applyChange({ ...dataRef.current, edges: dataRef.current.edges.filter(e => e.id !== edgeId) })
+    setSelected(null)
+  }
+
+  removeNodeRef.current = removeNode
+  removeEdgeRef.current = removeEdge
+  undoRef.current       = undo
+
+  // ── Prevent browser Ctrl+Scroll from zooming the page ───────
+  // (canvas has its own zoom; nothing outside it should zoom)
+  useEffect(() => {
+    function preventPageZoom(e) {
+      if (e.ctrlKey || e.metaKey) e.preventDefault()
+    }
+    document.addEventListener('wheel', preventPageZoom, { passive: false })
+    return () => document.removeEventListener('wheel', preventPageZoom)
+  }, [])
+
+  // ── Ctrl+Scroll → canvas zoom ────────────────────────────────
   useEffect(() => {
     const el = viewportRef.current
     if (!el) return
@@ -74,7 +111,7 @@ export default function MindMap({ data, onChange }) {
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  // ── Pinch-to-zoom (touch) ────────────────────────────────────
+  // ── Pinch-to-zoom ────────────────────────────────────────────
   useEffect(() => {
     const el = viewportRef.current
     if (!el) return
@@ -102,42 +139,29 @@ export default function MindMap({ data, onChange }) {
     }
   }, [])
 
-  // ── Keyboard shortcuts ───────────────────────────────────────
+  // ── Keyboard shortcuts — safe via refs ───────────────────────
   useEffect(() => {
     function onKey(e) {
       const tag = document.activeElement?.tagName
       if (e.key === 'Escape') { setConnectFrom(null); setSelected(null); return }
       if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
         if (tag === 'INPUT' || tag === 'TEXTAREA') return
-        e.preventDefault(); undo(); return
+        e.preventDefault()
+        undoRef.current?.()
+        return
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && tag !== 'INPUT' && tag !== 'TEXTAREA') {
         const sel = selectedRef.current
         if (!sel) return
-        if (sel.startsWith('node-')) removeNode(sel.slice(5))
-        else if (sel.startsWith('edge-')) removeEdge(sel.slice(5))
+        if (sel.startsWith('node-')) removeNodeRef.current?.(sel.slice(5))
+        else if (sel.startsWith('edge-')) removeEdgeRef.current?.(sel.slice(5))
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [])   // safe — all functions accessed through refs
 
-  // ── Remove helpers ───────────────────────────────────────────
-  function removeNode(nodeId) {
-    applyChange({
-      ...dataRef.current,
-      nodes: dataRef.current.nodes.filter(n => n.id !== nodeId),
-      edges: dataRef.current.edges.filter(e => e.from !== nodeId && e.to !== nodeId),
-    })
-    setSelected(null); setConnectFrom(null)
-  }
-
-  function removeEdge(edgeId) {
-    applyChange({ ...dataRef.current, edges: dataRef.current.edges.filter(e => e.id !== edgeId) })
-    setSelected(null)
-  }
-
-  // ── Canvas coordinate conversion ─────────────────────────────
+  // ── Canvas coordinates ───────────────────────────────────────
   function toCanvas(clientX, clientY) {
     const rect = canvasRef.current.getBoundingClientRect()
     return { x: (clientX - rect.left) / zoomRef.current, y: (clientY - rect.top) / zoomRef.current }
@@ -212,43 +236,44 @@ export default function MindMap({ data, onChange }) {
     setConnectFrom(null)
   }
 
-  // ── Pointer drag handlers ────────────────────────────────────
-  // Called from each node's onPointerDown (after setPointerCapture on node element)
+  // ── Drag handlers — use dragStateRef so handlePointerUp never reads stale state ─
   function handleNodePointerDown(e, nodeId) {
-    if (e.detail >= 2) return           // let double-click handler take over
-    e.stopPropagation()                 // don't trigger canvas click → deselect
-
+    if (e.detail >= 2) return
+    e.stopPropagation()
     if (connectFrom) { completeConnect(nodeId); return }
-
     const node = dataRef.current.nodes.find(n => n.id === nodeId)
     const pos  = toCanvas(e.clientX, e.clientY)
     dragOffRef.current = { x: pos.x - node.x, y: pos.y - node.y }
-    setDragState({ id: nodeId, x: node.x, y: node.y })
+    const initial = { id: nodeId, x: node.x, y: node.y }
+    dragStateRef.current = initial
+    setDragState(initial)
     setSelected(`node-${nodeId}`)
-    // pointer capture is set by the caller (inline JSX) on e.currentTarget
+    // pointer capture set by inline JSX on the node element
   }
 
-  // Shared move handler — fires on the node element (via pointer capture) OR canvas
   function handlePointerMove(e) {
-    if (!dragState || pinchRef.current) return
+    if (!dragStateRef.current || pinchRef.current) return
     const { x, y } = toCanvas(e.clientX, e.clientY)
-    const { w, h } = nd(dataRef.current.nodes.find(n => n.id === dragState.id) || { type: 'leaf' })
-    setDragState(s => ({
-      ...s,
+    const { w, h } = nd(dataRef.current.nodes.find(n => n.id === dragStateRef.current.id) || { type: 'leaf' })
+    const next = {
+      ...dragStateRef.current,
       x: Math.max(0, Math.min(CANVAS_W - w, x - dragOffRef.current.x)),
       y: Math.max(0, Math.min(CANVAS_H - h, y - dragOffRef.current.y)),
-    }))
+    }
+    dragStateRef.current = next
+    setDragState(next)
   }
 
-  // Shared up handler — commits position to history
   function handlePointerUp() {
-    if (!dragState) return
+    const ds = dragStateRef.current
+    if (!ds) return
     applyChange({
       ...dataRef.current,
       nodes: dataRef.current.nodes.map(n =>
-        n.id === dragState.id ? { ...n, x: dragState.x, y: dragState.y } : n
+        n.id === ds.id ? { ...n, x: ds.x, y: ds.y } : n
       ),
     })
+    dragStateRef.current = null
     setDragState(null)
   }
 
@@ -276,7 +301,8 @@ export default function MindMap({ data, onChange }) {
 
   // ── Geometry helpers ─────────────────────────────────────────
   function getPos(node) {
-    if (dragState?.id === node.id) return { x: dragState.x, y: dragState.y }
+    const ds = dragStateRef.current
+    if (ds?.id === node.id) return { x: ds.x, y: ds.y }
     return { x: node.x, y: node.y }
   }
 
@@ -307,7 +333,7 @@ export default function MindMap({ data, onChange }) {
         <div className="mm-sep" />
 
         <div className="mm-group">
-          <button className="mm-btn" onClick={undo} title="Undo (⌘Z)">↩</button>
+          <button className="mm-btn" onClick={undo} title="Undo (⌘Z)">↺</button>
         </div>
 
         <div className="mm-sep" />
@@ -333,11 +359,11 @@ export default function MindMap({ data, onChange }) {
       {/* ── Viewport ── */}
       <div className="mm-viewport" ref={viewportRef}>
         <div style={{
-          position: 'relative',
-          width:    Math.max(CANVAS_W * zoom, viewportRef.current?.clientWidth  || 0),
-          height:   Math.max(CANVAS_H * zoom, viewportRef.current?.clientHeight || 0),
-          minWidth: '100%',
-          minHeight:'100%',
+          position:  'relative',
+          width:     Math.max(CANVAS_W * zoom, viewportRef.current?.clientWidth  || 0),
+          height:    Math.max(CANVAS_H * zoom, viewportRef.current?.clientHeight || 0),
+          minWidth:  '100%',
+          minHeight: '100%',
         }}>
           <div
             className="mm-canvas"
@@ -375,7 +401,7 @@ export default function MindMap({ data, onChange }) {
               return (
                 <div key={node.id} style={{ position: 'absolute', left: pos.x, top: pos.y }}>
 
-                  {/* Action bar — floats above selected node, matches dark aesthetic */}
+                  {/* Action bar — appears above selected node */}
                   {isSel && !isConnecting && (
                     <div className="mm-node-actions" style={{ minWidth: w }}>
                       <button
@@ -398,8 +424,6 @@ export default function MindMap({ data, onChange }) {
                     className={`mm-node type-${node.type}${isSel ? ' sel' : ''}${isSrc ? ' src' : ''}`}
                     style={{ width: w, height: h }}
                     onPointerDown={e => {
-                      // setPointerCapture MUST be called on the element that received pointerdown
-                      // so that pointermove fires on THIS element during drag (even off-node)
                       try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
                       handleNodePointerDown(e, node.id)
                     }}
