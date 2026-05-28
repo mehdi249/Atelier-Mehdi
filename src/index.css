@@ -396,7 +396,7 @@ body {
 }
 .stage-tab.active .stage-label { display: inline; }
 
-.stage-content { flex: 1; overflow-y: auto; }
+.stage-content { flex: 1; overflow-y: auto; min-height: 0; }
 
 /* ── STAGE PANELS ───────────────────────────────────────── */
 .stage-panel { padding: 36px 48px 60px; max-width: 1100px; }
@@ -772,18 +772,29 @@ body {
   flex: 1;
   overflow: hidden;
   height: 100%;
+  position: relative;  /* anchor for floating toolbar */
 }
 
-/* Toolbar */
+/* Floating island toolbar */
 .mm-toolbar {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 24px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  padding: 7px 12px;
+  background: rgba(22, 22, 24, 0.90);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-light);
+  border-radius: 26px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.3);
+  white-space: nowrap;
   flex-shrink: 0;
-  flex-wrap: wrap;
+  pointer-events: auto;
 }
 
 .mm-group {
@@ -872,6 +883,7 @@ body {
   width: 1800px;
   height: 1100px;
   background: transparent;
+  overflow: visible;   /* nodes outside 1800×1100 still render */
 }
 
 /* Nodes must block browser scroll so pointer drag works */
@@ -944,10 +956,17 @@ body {
   text-align: center;
 }
 .mm-node:active { cursor: grabbing; }
-.mm-node.sel    { box-shadow: 0 0 0 2.5px var(--accent), 0 0 28px rgba(201,169,110,0.55), 0 0 60px rgba(201,169,110,0.18); }
-.mm-node.src    { box-shadow: 0 0 0 2px #5e9eca, 0 0 22px rgba(94,158,202,0.45); }
+.mm-node.sel {
+  animation: mm-node-pulse 1.8s ease-in-out infinite;
+}
+.mm-node.src { box-shadow: 0 0 0 2px #5e9eca, 0 0 22px rgba(94,158,202,0.45); }
 .mm-node.type-branch.sel { background: #3a3a3c; }
 .mm-node.type-leaf.sel   { background: #2c2c2e; }
+
+@keyframes mm-node-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--accent), 0 0 18px rgba(201,169,110,0.5), 0 0 40px rgba(201,169,110,0.15); }
+  50%      { box-shadow: 0 0 0 3px var(--accent), 0 0 32px rgba(201,169,110,0.85), 0 0 72px rgba(201,169,110,0.3); }
+}
 
 .mm-node.type-root {
   background: var(--accent);
