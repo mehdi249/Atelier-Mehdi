@@ -40,9 +40,73 @@ export function createBaranTemplate() {
         ]
       },
       research: {
-        narrative: 'BARAN explores the relationship between protection and vulnerability in contemporary fashion. The collection draws from the relentless energy of storm systems — the way rain reshapes architecture, the drama of dark clouds gathering over a city. Each piece is designed to be both shield and silhouette: outerwear that commands presence while offering genuine shelter. The name BARAN (باران — Persian for rain) grounds the collection in a specific emotional landscape: the quiet intimacy of a storm, the heightened clarity it brings.',
+        narrative: 'BARAN explores the relationship between protection and vulnerability in contemporary fashion.',
         urls: [],
-        images: []
+        images: [],
+        references: [
+          {
+            id: 'ref1', type: 'text',
+            content: 'Storm systems as architectural force — buildings designed to channel wind, deflect rain, impose shelter. The Barbican, London: brutalist weather machine. Concrete that sheds water and accumulates character.',
+            caption: 'Architecture + Storm', tags: [],
+          },
+          {
+            id: 'ref2', type: 'url',
+            content: 'https://en.wikipedia.org/wiki/Barbican_Centre',
+            caption: 'Barbican Centre — Brutalist shelter architecture', tags: [],
+          },
+          {
+            id: 'ref3', type: 'text',
+            content: 'Rain on reflective surfaces — puddles become mirrors, wet cobblestone turns cinematic. Blade Runner 2049 opening sequence. The way wet fabric clings, reshapes the silhouette, then releases.',
+            caption: 'Film — reflective surfaces', tags: [],
+          },
+          {
+            id: 'ref4', type: 'text',
+            content: 'Traditional Iranian aba (عبا) — total body protection, dramatic silhouette, enormous emotional weight. A garment that communicates refuge and presence simultaneously.',
+            caption: 'Cultural reference — Iranian aba', tags: [],
+          },
+        ],
+        insights: [
+          {
+            id: 'ins1',
+            title: 'Storm as Protection Language',
+            why: 'Storm systems create structures — wind patterns, rain paths, shelter architectures — that directly inform how a garment wraps a body. Protection is not absence of exposure; it is managed exposure.',
+            emotional: 'Simultaneous vulnerability and power. The feeling of being inside a storm: completely present, heightened, alive. BARAN should carry that tension.',
+            silhouette: 'Oversized, cocoon-like forms that create a micro-weather zone around the body. Garments that drape like weather systems — heavy at the shoulders, releasing downward.',
+            texture: 'Ripstop tension against softer underlayers. Wet-look vs dry-matte contrasts within the same piece. Technical surfaces that read differently in motion versus stillness.',
+            functional: 'Storm flaps, hidden plackets, adjustable closures that allow transformation between open and sealed states. The garment should change its relationship to weather.',
+          },
+          {
+            id: 'ins2',
+            title: 'Reflective Movement',
+            why: 'Rain creates a secondary world — reflections that distort and reveal simultaneously. Familiar environments become unfamiliar. Emotionally it feels futuristic but intimate.',
+            emotional: 'Heightened awareness, hyper-present sensory state. The world made strange and beautiful through a lens of water.',
+            silhouette: 'Asymmetric edges that break expected lines. Seams that reference water flow and optical distortion rather than conventional construction logic.',
+            texture: 'Glossy coated fabrics. Metallic wovens. Surfaces that hold light differently at every angle — the garment changes as you move around it.',
+            functional: 'Reflective piping and edge treatments that serve both weather performance and aesthetic purpose. Seam lines as water channels that guide the eye.',
+          },
+        ],
+        directions: [
+          {
+            id: 'dir1',
+            research: 'Rain creates reflective movement and atmospheric distortion — the world remade, familiar things estranged and illuminated.',
+            translations: [
+              { id: 't1', text: 'Glossy ripstop shell with matte contrast underlayer' },
+              { id: 't2', text: 'Reflective piping along key seam lines and edges' },
+              { id: 't3', text: 'Layered silhouettes that reference atmospheric depth' },
+              { id: 't4', text: 'Asymmetrical seam lines that echo water distortion patterns' },
+            ],
+          },
+          {
+            id: 'dir2',
+            research: 'Storm systems as architectural shelter — protection that imposes presence rather than disappears into function.',
+            translations: [
+              { id: 't5', text: 'Structured dropped shoulders with architectural volume' },
+              { id: 't6', text: 'Hidden storm flaps and internal snap closures throughout' },
+              { id: 't7', text: 'Oversized silhouettes with internal structure for shape retention' },
+              { id: 't8', text: 'Technical fabrics with visible construction detailing as design language' },
+            ],
+          },
+        ],
       },
       sketches: { notes: '', images: [] },
       styleCards: {
@@ -115,7 +179,7 @@ export function createEmptyCollection() {
     progressOverride: null,
     stages: {
       mindMap: { nodes: [], edges: [] },
-      research: { narrative: '', urls: [], images: [] },
+      research: { narrative: '', urls: [], images: [], references: [], insights: [], directions: [] },
       sketches: { notes: '', images: [] },
       styleCards: { notes: '', pieces: [] },
       patterns: { notes: '', images: [] },

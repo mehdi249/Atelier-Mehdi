@@ -29,14 +29,18 @@ export default function MindMap({ data, onChange }) {
   const [editText, setEditText]       = useState('')
   const [connectFrom, setConnectFrom] = useState(null)
   const [selected, setSelected]       = useState(null)
+  const [toolbarPos, setToolbarPos]   = useState(null)
 
-  const canvasRef      = useRef(null)
-  const viewportRef    = useRef(null)
-  const dragOffRef     = useRef({ x: 0, y: 0 })
-  const dataRef        = useRef(data)
-  const zoomRef        = useRef(zoom)
-  const selectedRef    = useRef(null)
-  const pinchRef       = useRef(null)
+  const canvasRef          = useRef(null)
+  const viewportRef        = useRef(null)
+  const wrapperRef         = useRef(null)
+  const toolbarRef         = useRef(null)
+  const toolbarDragOrigin  = useRef(null)
+  const dragOffRef         = useRef({ x: 0, y: 0 })
+  const dataRef            = useRef(data)
+  const zoomRef            = useRef(zoom)
+  const selectedRef        = useRef(null)
+  const pinchRef           = useRef(null)
 
   const onChangeRef    = useRef(onChange)
   const dragStateRef   = useRef(null)
@@ -291,6 +295,21 @@ export default function MindMap({ data, onChange }) {
     setSelected(null)
   }
 
+  // ── Toolbar drag ─────────────────────────────────────────
+  function startToolbarDrag(e) {
+    e.stopPropagation()
+    e.preventDefault()
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
+    const wRect = wrapperRef.current.getBoundingClientRect()
+    const tRect = toolbarRef.current.getBoundingClientRect()
+    toolbarDragOrigin.current = {
+      pointerX: e.clientX,
+      pointerY: e.clientY,
+      startLeft: tRect.left - wRect.left,
+      startTop:  tRect.top  - wRect.top,
+    }
+  }
+
   // ── Geometry ─────────────────────────────────────────────────
   function getPos(node) {
     const ds = dragStateRef.current
@@ -311,9 +330,26 @@ export default function MindMap({ data, onChange }) {
   const isConnecting = !!connectFrom
 
   return (
-    <div className="mm-wrapper">
+    <div className="mm-wrapper" ref={wrapperRef}>
       {/* ── Floating toolbar island ── */}
-      <div className="mm-toolbar">
+      <div
+        className="mm-toolbar"
+        ref={toolbarRef}
+        style={toolbarPos ? { left: toolbarPos.x, top: toolbarPos.y, transform: 'none' } : {}}
+        onPointerMove={e => {
+          if (!toolbarDragOrigin.current) return
+          e.stopPropagation()
+          const { pointerX, pointerY, startLeft, startTop } = toolbarDragOrigin.current
+          setToolbarPos({ x: startLeft + (e.clientX - pointerX), y: startTop + (e.clientY - pointerY) })
+        }}
+        onPointerUp={() => { toolbarDragOrigin.current = null }}
+      >
+        <button
+          className="mm-btn mm-drag-handle"
+          onPointerDown={startToolbarDrag}
+          title="Move toolbar"
+        >⠿</button>
+        <div className="mm-sep" />
         <div className="mm-group">
           <button className="mm-btn" onClick={addNode} title="Add Node">+</button>
           <label className="mm-btn mm-file-btn" title="Import image">
