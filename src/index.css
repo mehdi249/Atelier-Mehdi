@@ -856,7 +856,8 @@ body {
   background-color: #080808;
   background-image: radial-gradient(circle, #2c2c2e 1px, transparent 1px);
   background-size: 26px 26px;
-  touch-action: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* Canvas */
@@ -868,55 +869,48 @@ body {
   background: transparent;
 }
 
-/* Node delete & connect overlays */
-.mm-node-delete {
-  position: absolute;
-  top: -10px;
-  right: -10px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--danger);
-  border: 2px solid #000;
-  color: #fff;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-  transition: transform 0.12s, background 0.12s;
-  font-family: var(--font);
-  padding: 0;
-}
-.mm-node-delete:hover { transform: scale(1.15); background: #ff6058; }
+/* Nodes must block browser scroll so pointer drag works */
+.mm-node { touch-action: none; will-change: transform; }
 
-.mm-node-connect {
+/* Node action bar — floats above selected node */
+.mm-node-actions {
   position: absolute;
-  top: 50%;
-  right: -18px;
-  transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #5e9eca;
-  border: 2px solid #000;
-  color: #fff;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
+  bottom: calc(100% + 8px);
+  left: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 10;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-  transition: transform 0.12s, background 0.12s;
-  font-family: var(--font);
-  padding: 0;
+  background: var(--surface-3);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  z-index: 20;
+  white-space: nowrap;
 }
-.mm-node-connect:hover { transform: translateY(-50%) scale(1.15); background: #7ab3d8; }
+
+.mm-action-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+  flex: 1;
+  text-align: center;
+}
+.mm-action-btn:hover              { color: var(--text); background: rgba(255,255,255,0.05); }
+.mm-action-btn.mm-action-delete   { color: var(--danger); }
+.mm-action-btn.mm-action-delete:hover { background: var(--danger-dim); }
+
+.mm-action-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border-light);
+  flex-shrink: 0;
+}
 
 /* SVG edges */
 .mm-edge {

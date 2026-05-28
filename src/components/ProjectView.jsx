@@ -8,14 +8,14 @@ import Lookbook from './stages/Lookbook'
 import { calculateProgress, exportCollectionJSON, exportMindMapSVG } from '../utils'
 
 const STAGES = [
-  { key: 'mindMap',      label: 'Mind Map',     icon: '◎' },
-  { key: 'research',     label: 'Research',     icon: '◈' },
-  { key: 'sketches',     label: 'Sketches',     icon: '◇' },
-  { key: 'styleCards',   label: 'Style Cards',  icon: '◆' },
-  { key: 'patterns',     label: 'Patterns',     icon: '◐' },
-  { key: 'clo3d',        label: 'CLO3D',        icon: '◉' },
-  { key: 'construction', label: 'Construction', icon: '◑' },
-  { key: 'lookbook',     label: 'Lookbook',     icon: '◼' },
+  { key: 'mindMap',      label: 'Mind Map',     icon: '🧠' },
+  { key: 'research',     label: 'Research',     icon: '🔍' },
+  { key: 'sketches',     label: 'Sketches',     icon: '✏️' },
+  { key: 'styleCards',   label: 'Style Cards',  icon: '🃏' },
+  { key: 'patterns',     label: 'Patterns',     icon: '✂️' },
+  { key: 'clo3d',        label: 'CLO3D',        icon: '🧊' },
+  { key: 'construction', label: 'Construction', icon: '📐' },
+  { key: 'lookbook',     label: 'Lookbook',     icon: '📸' },
 ]
 
 export default function ProjectView({ collection, onUpdate, onUpdateStage, onDelete, onBack }) {

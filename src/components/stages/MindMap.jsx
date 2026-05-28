@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { generateId, compressImage } from '../../utils'
 
 const CANVAS_W = 1800
@@ -21,71 +21,81 @@ function getTypeForNew(nodes) {
 export default function MindMap({ data, onChange }) {
   const { nodes, edges } = data
 
-  const [zoom, setZoom]           = useState(0.72)
-  const [dragState, setDragState] = useState(null)
-  const [editing, setEditing]     = useState(null)
-  const [editText, setEditText]   = useState('')
+  const [zoom, setZoom]               = useState(0.72)
+  const [dragState, setDragState]     = useState(null)
+  const [editing, setEditing]         = useState(null)
+  const [editText, setEditText]       = useState('')
   const [connectFrom, setConnectFrom] = useState(null)
-  const [selected, setSelected]   = useState(null)
+  const [selected, setSelected]       = useState(null)
 
-  const canvasRef    = useRef(null)
-  const viewportRef  = useRef(null)
-  const dragOffRef   = useRef({ x: 0, y: 0 })
-  const dataRef      = useRef(data)
-  const zoomRef      = useRef(zoom)
-  const selectedRef  = useRef(null)
-  // touch pinch state
-  const pinchRef     = useRef(null)
+  const canvasRef   = useRef(null)
+  const viewportRef = useRef(null)
+  const dragOffRef  = useRef({ x: 0, y: 0 })
+  const dataRef     = useRef(data)
+  const zoomRef     = useRef(zoom)
+  const selectedRef = useRef(null)
+  const pinchRef    = useRef(null)
 
-  useEffect(() => { dataRef.current = data },       [data])
-  useEffect(() => { zoomRef.current = zoom },       [zoom])
+  // History for undo
+  const histRef  = useRef(null)
+  if (!histRef.current) histRef.current = { stack: [data], idx: 0 }
+
+  useEffect(() => { dataRef.current = data },         [data])
+  useEffect(() => { zoomRef.current = zoom },         [zoom])
   useEffect(() => { selectedRef.current = selected }, [selected])
 
-  // ── Ctrl+Scroll to zoom ──────────────────────────────────────
+  // ── Persist change + push history ───────────────────────────
+  function applyChange(newData) {
+    const { stack, idx } = histRef.current
+    const next = stack.slice(0, idx + 1).concat([newData])
+    if (next.length > 60) next.shift()
+    histRef.current = { stack: next, idx: next.length - 1 }
+    onChange(newData)
+  }
+
+  function undo() {
+    const h = histRef.current
+    if (h.idx <= 0) return
+    h.idx--
+    onChange(h.stack[h.idx])
+  }
+
+  // ── Ctrl+Scroll zoom ─────────────────────────────────────────
   useEffect(() => {
     const el = viewportRef.current
     if (!el) return
     function onWheel(e) {
       if (!e.ctrlKey && !e.metaKey) return
       e.preventDefault()
-      const delta = e.deltaY < 0 ? 0.08 : -0.08
-      setZoom(z => +Math.max(0.25, Math.min(2.5, z + delta)).toFixed(2))
+      setZoom(z => +Math.max(0.25, Math.min(2.5, z + (e.deltaY < 0 ? 0.08 : -0.08))).toFixed(2))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  // ── Pinch-to-zoom (touch) ────────────────────────────────────
+  // ── Pinch-to-zoom ────────────────────────────────────────────
   useEffect(() => {
     const el = viewportRef.current
     if (!el) return
-
     function dist(a, b) {
-      const dx = a.clientX - b.clientX, dy = a.clientY - b.clientY
-      return Math.sqrt(dx * dx + dy * dy)
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
     }
-
     function onTouchStart(e) {
       if (e.touches.length === 2) {
         e.preventDefault()
         pinchRef.current = { d: dist(e.touches[0], e.touches[1]), z: zoomRef.current }
       }
     }
-
     function onTouchMove(e) {
       if (e.touches.length === 2 && pinchRef.current) {
         e.preventDefault()
-        const d = dist(e.touches[0], e.touches[1])
-        const scale = d / pinchRef.current.d
-        const newZ = +Math.max(0.25, Math.min(2.5, pinchRef.current.z * scale)).toFixed(2)
-        setZoom(newZ)
+        const scale = dist(e.touches[0], e.touches[1]) / pinchRef.current.d
+        setZoom(+Math.max(0.25, Math.min(2.5, pinchRef.current.z * scale)).toFixed(2))
       }
     }
-
     function onTouchEnd(e) {
       if (e.touches.length < 2) pinchRef.current = null
     }
-
     el.addEventListener('touchstart', onTouchStart, { passive: false })
     el.addEventListener('touchmove',  onTouchMove,  { passive: false })
     el.addEventListener('touchend',   onTouchEnd,   { passive: false })
@@ -96,17 +106,16 @@ export default function MindMap({ data, onChange }) {
     }
   }, [])
 
-  // ── Keyboard: Delete / Escape ────────────────────────────────
+  // ── Keyboard shortcuts ───────────────────────────────────────
   useEffect(() => {
     function onKey(e) {
-      if (e.key === 'Escape') {
-        setConnectFrom(null)
-        setSelected(null)
-        return
-      }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        const tag = document.activeElement?.tagName
+      const tag = document.activeElement?.tagName
+      if (e.key === 'Escape') { setConnectFrom(null); setSelected(null); return }
+      if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
         if (tag === 'INPUT' || tag === 'TEXTAREA') return
+        e.preventDefault(); undo(); return
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && tag !== 'INPUT' && tag !== 'TEXTAREA') {
         const sel = selectedRef.current
         if (!sel) return
         if (sel.startsWith('node-')) removeNode(sel.slice(5))
@@ -117,59 +126,52 @@ export default function MindMap({ data, onChange }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // ── Node / edge removal ──────────────────────────────────────
+  // ── Remove helpers ───────────────────────────────────────────
   function removeNode(nodeId) {
-    onChange({
+    applyChange({
       ...dataRef.current,
       nodes: dataRef.current.nodes.filter(n => n.id !== nodeId),
       edges: dataRef.current.edges.filter(e => e.from !== nodeId && e.to !== nodeId),
     })
-    setSelected(null)
-    setConnectFrom(null)
+    setSelected(null); setConnectFrom(null)
   }
 
   function removeEdge(edgeId) {
-    onChange({ ...dataRef.current, edges: dataRef.current.edges.filter(e => e.id !== edgeId) })
+    applyChange({ ...dataRef.current, edges: dataRef.current.edges.filter(e => e.id !== edgeId) })
     setSelected(null)
   }
 
-  // ── Canvas coordinate conversion ─────────────────────────────
+  // ── Canvas coordinate helper ─────────────────────────────────
   function toCanvas(clientX, clientY) {
     const rect = canvasRef.current.getBoundingClientRect()
-    return {
-      x: (clientX - rect.left) / zoomRef.current,
-      y: (clientY - rect.top)  / zoomRef.current,
-    }
+    return { x: (clientX - rect.left) / zoomRef.current, y: (clientY - rect.top) / zoomRef.current }
   }
 
   // ── Add node ─────────────────────────────────────────────────
   function addNode() {
     const type = getTypeForNew(dataRef.current.nodes)
     const { w, h } = NODE_DIMS[type]
-    const id = generateId()
-    const cx = CANVAS_W / 2, cy = CANVAS_H / 2
-    onChange({
+    applyChange({
       ...dataRef.current,
       nodes: [...dataRef.current.nodes, {
-        id, type,
-        x: cx - w / 2 + (Math.random() - 0.5) * 200,
-        y: cy - h / 2 + (Math.random() - 0.5) * 200,
+        id: generateId(), type,
+        x: CANVAS_W / 2 - w / 2 + (Math.random() - 0.5) * 200,
+        y: CANVAS_H / 2 - h / 2 + (Math.random() - 0.5) * 200,
         text: 'New Node',
       }],
     })
   }
 
-  // ── Image import ──────────────────────────────────────────────
+  // ── Image import ─────────────────────────────────────────────
   async function handleImageImport(e) {
     const file = e.target.files[0]
     if (!file) return
     e.target.value = ''
     const src = await compressImage(file)
-    const id = generateId()
-    onChange({
+    applyChange({
       ...dataRef.current,
       nodes: [...dataRef.current.nodes, {
-        id, src, type: 'image',
+        id: generateId(), src, type: 'image',
         x: CANVAS_W / 2 - 75 + (Math.random() - 0.5) * 300,
         y: CANVAS_H / 2 - 55 + (Math.random() - 0.5) * 200,
         text: file.name.replace(/\.[^.]+$/, ''),
@@ -180,7 +182,7 @@ export default function MindMap({ data, onChange }) {
   // ── Fit view ─────────────────────────────────────────────────
   function fitView() {
     const n = dataRef.current.nodes
-    if (n.length === 0) { setZoom(0.72); return }
+    if (!n.length) { setZoom(0.72); return }
     const pad = 80
     const minX = Math.min(...n.map(nd => nd.x)) - pad
     const minY = Math.min(...n.map(nd => nd.y)) - pad
@@ -188,11 +190,10 @@ export default function MindMap({ data, onChange }) {
     const maxY = Math.max(...n.map(node => node.y + (NODE_DIMS[node.type] || NODE_DIMS.leaf).h)) + pad
     const vW = viewportRef.current?.clientWidth  || 900
     const vH = viewportRef.current?.clientHeight || 600
-    const newZoom = Math.min(vW / (maxX - minX), vH / (maxY - minY), 1.5)
-    setZoom(+Math.max(0.25, Math.min(2.5, newZoom)).toFixed(2))
+    setZoom(+Math.max(0.25, Math.min(1.5, Math.min(vW / (maxX - minX), vH / (maxY - minY)))).toFixed(2))
   }
 
-  // ── Connect from node handle ──────────────────────────────────
+  // ── Connect helpers ──────────────────────────────────────────
   function startConnect(e, nodeId) {
     e.stopPropagation()
     e.preventDefault()
@@ -207,7 +208,7 @@ export default function MindMap({ data, onChange }) {
             (ed.from === targetId && ed.to === connectFrom)
     )
     if (!exists) {
-      onChange({
+      applyChange({
         ...dataRef.current,
         edges: [...dataRef.current.edges, { id: generateId(), from: connectFrom, to: targetId }],
       })
@@ -215,31 +216,26 @@ export default function MindMap({ data, onChange }) {
     setConnectFrom(null)
   }
 
-  // ── Pointer handlers ─────────────────────────────────────────
+  // ── Pointer drag ─────────────────────────────────────────────
   function handleNodePointerDown(e, nodeId) {
     if (e.detail >= 2) return
     e.stopPropagation()
 
-    // If we're in connect mode (from handle click), complete the connection
-    if (connectFrom) {
-      completeConnect(nodeId)
-      return
-    }
+    if (connectFrom) { completeConnect(nodeId); return }
 
     const node = dataRef.current.nodes.find(n => n.id === nodeId)
-    const pos = toCanvas(e.clientX, e.clientY)
+    const pos  = toCanvas(e.clientX, e.clientY)
     dragOffRef.current = { x: pos.x - node.x, y: pos.y - node.y }
     setDragState({ id: nodeId, x: node.x, y: node.y })
     setSelected(`node-${nodeId}`)
+
+    // Capture pointer so pointermove fires on canvas even when finger leaves the node
+    try { canvasRef.current?.setPointerCapture(e.pointerId) } catch (_) {}
   }
 
   function handlePointerMove(e) {
-    if (!dragState) return
-    // Ignore if multi-touch (pinch in progress)
-    if (pinchRef.current) return
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY
-    const { x, y } = toCanvas(clientX, clientY)
+    if (!dragState || pinchRef.current) return
+    const { x, y } = toCanvas(e.clientX, e.clientY)
     const { w, h } = nd(dataRef.current.nodes.find(n => n.id === dragState.id) || { type: 'leaf' })
     setDragState(s => ({
       ...s,
@@ -250,7 +246,7 @@ export default function MindMap({ data, onChange }) {
 
   function handlePointerUp() {
     if (!dragState) return
-    onChange({
+    applyChange({
       ...dataRef.current,
       nodes: dataRef.current.nodes.map(n =>
         n.id === dragState.id ? { ...n, x: dragState.x, y: dragState.y } : n
@@ -267,7 +263,7 @@ export default function MindMap({ data, onChange }) {
   }
 
   function commitEdit(nodeId) {
-    onChange({
+    applyChange({
       ...dataRef.current,
       nodes: dataRef.current.nodes.map(n =>
         n.id === nodeId ? { ...n, text: editText.trim() || n.text } : n
@@ -281,15 +277,14 @@ export default function MindMap({ data, onChange }) {
     setSelected(null)
   }
 
-  // ── Helpers ──────────────────────────────────────────────────
+  // ── Geometry helpers ─────────────────────────────────────────
   function getPos(node) {
     if (dragState?.id === node.id) return { x: dragState.x, y: dragState.y }
     return { x: node.x, y: node.y }
   }
 
   function center(node) {
-    const pos = getPos(node)
-    const { w, h } = nd(node)
+    const pos = getPos(node), { w, h } = nd(node)
     return { x: pos.x + w / 2, y: pos.y + h / 2 }
   }
 
@@ -315,33 +310,39 @@ export default function MindMap({ data, onChange }) {
         <div className="mm-sep" />
 
         <div className="mm-group">
+          <button className="mm-btn" onClick={undo} title="Undo (⌘Z)">↩</button>
+        </div>
+
+        <div className="mm-sep" />
+
+        <div className="mm-group">
           <button className="mm-btn" onClick={() => setZoom(z => +Math.max(0.25, z - 0.12).toFixed(2))} title="Zoom Out">−</button>
           <span className="mm-zoom">{Math.round(zoom * 100)}%</span>
           <button className="mm-btn" onClick={() => setZoom(z => +Math.min(2.5, z + 0.12).toFixed(2))} title="Zoom In">+</button>
-          <button className="mm-btn" onClick={fitView} title="Fit all nodes in view">⊡</button>
+          <button className="mm-btn" onClick={fitView} title="Fit all nodes">⊡</button>
         </div>
 
         {isConnecting && (
           <>
             <div className="mm-sep" />
             <span className="mm-connect-status">
-              Click a node to connect — Esc to cancel
+              Tap a node to connect — Esc to cancel
             </span>
-            <button className="mm-btn" onClick={() => setConnectFrom(null)} title="Cancel connect">✕</button>
+            <button className="mm-btn" onClick={() => setConnectFrom(null)} title="Cancel">✕</button>
           </>
         )}
 
-        <span className="mm-hint-text">Ctrl+Scroll or pinch · Double-click to edit · Delete removes selection</span>
+        <span className="mm-hint-text">Ctrl+Scroll or pinch · Double-tap to edit · ⌘Z undo</span>
       </div>
 
       {/* ── Viewport ── */}
       <div className="mm-viewport" ref={viewportRef}>
-        <div className="mm-scroll-bg" style={{
+        <div style={{
+          position: 'relative',
           width: Math.max(CANVAS_W * zoom, viewportRef.current?.clientWidth  || 0),
           height: Math.max(CANVAS_H * zoom, viewportRef.current?.clientHeight || 0),
           minWidth: '100%',
           minHeight: '100%',
-          position: 'relative',
           flexShrink: 0,
         }}>
           <div
@@ -367,10 +368,7 @@ export default function MindMap({ data, onChange }) {
                     d={bezier(fc, tc)}
                     className={`mm-edge${isSel ? ' selected' : ''}`}
                     style={{ pointerEvents: 'stroke' }}
-                    onClick={e => {
-                      e.stopPropagation()
-                      setSelected(s => s === `edge-${edge.id}` ? null : `edge-${edge.id}`)
-                    }}
+                    onClick={e => { e.stopPropagation(); setSelected(s => s === `edge-${edge.id}` ? null : `edge-${edge.id}`) }}
                   />
                 )
               })}
@@ -378,12 +376,31 @@ export default function MindMap({ data, onChange }) {
 
             {/* Nodes */}
             {nodes.map(node => {
-              const pos = getPos(node)
+              const pos  = getPos(node)
               const { w, h } = nd(node)
               const isSel = selected === `node-${node.id}`
               const isSrc = connectFrom === node.id
               return (
                 <div key={node.id} style={{ position: 'absolute', left: pos.x, top: pos.y }}>
+                  {/* Actions bar — floats above selected node */}
+                  {isSel && !isConnecting && (
+                    <div className="mm-node-actions" style={{ width: w }}>
+                      <button
+                        className="mm-action-btn mm-action-delete"
+                        onPointerDown={e => { e.stopPropagation(); removeNode(node.id) }}
+                        title="Delete"
+                      >Delete</button>
+                      <div className="mm-action-sep" />
+                      {node.type !== 'image' && (
+                        <button
+                          className="mm-action-btn"
+                          onPointerDown={e => startConnect(e, node.id)}
+                          title="Connect to another node"
+                        >Connect</button>
+                      )}
+                    </div>
+                  )}
+
                   <div
                     className={`mm-node type-${node.type}${isSel ? ' sel' : ''}${isSrc ? ' src' : ''}`}
                     style={{ width: w, height: h }}
@@ -414,24 +431,6 @@ export default function MindMap({ data, onChange }) {
                       <span className="mm-node-text">{node.text}</span>
                     )}
                   </div>
-
-                  {/* × delete chip — shown when selected */}
-                  {isSel && !isConnecting && (
-                    <button
-                      className="mm-node-delete"
-                      onPointerDown={e => { e.stopPropagation(); removeNode(node.id) }}
-                      title="Delete node"
-                    >×</button>
-                  )}
-
-                  {/* ⊕ connect handle — shown when selected */}
-                  {isSel && !isConnecting && node.type !== 'image' && (
-                    <button
-                      className="mm-node-connect"
-                      onPointerDown={e => startConnect(e, node.id)}
-                      title="Connect to another node"
-                    >⊕</button>
-                  )}
                 </div>
               )
             })}
