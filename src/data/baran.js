@@ -114,7 +114,7 @@ export function createBaranTemplate() {
           },
         ],
       },
-      sketches: { notes: '', images: [] },
+      sketches: { notes: '', images: [], cards: [] },
       styleCards: {
         notes: '',
         pieces: [
@@ -186,7 +186,7 @@ export function createEmptyCollection() {
     stages: {
       mindMap: { nodes: [], edges: [] },
       research: { narrative: '', urls: [], images: [], references: [], insights: [], directions: [] },
-      sketches: { notes: '', images: [] },
+      sketches: { notes: '', images: [], cards: [] },
       styleCards: { notes: '', pieces: [] },
       patterns: { notes: '', images: [] },
       clo3d: { notes: '', images: [] },
