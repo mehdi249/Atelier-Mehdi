@@ -35,16 +35,17 @@ export default function MindMap({ data, onChange }) {
   const zoomRef     = useRef(zoom)
   const selectedRef = useRef(null)
   const pinchRef    = useRef(null)
+  const dragNodeRef = useRef(null) // DOM element currently being dragged
 
-  // History for undo
-  const histRef  = useRef(null)
+  // History for undo — persists across renders, never resets
+  const histRef = useRef(null)
   if (!histRef.current) histRef.current = { stack: [data], idx: 0 }
 
   useEffect(() => { dataRef.current = data },         [data])
   useEffect(() => { zoomRef.current = zoom },         [zoom])
   useEffect(() => { selectedRef.current = selected }, [selected])
 
-  // ── Persist change + push history ───────────────────────────
+  // ── History / undo ───────────────────────────────────────────
   function applyChange(newData) {
     const { stack, idx } = histRef.current
     const next = stack.slice(0, idx + 1).concat([newData])
@@ -73,13 +74,11 @@ export default function MindMap({ data, onChange }) {
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  // ── Pinch-to-zoom ────────────────────────────────────────────
+  // ── Pinch-to-zoom (touch) ────────────────────────────────────
   useEffect(() => {
     const el = viewportRef.current
     if (!el) return
-    function dist(a, b) {
-      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
-    }
+    function dist(a, b) { return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) }
     function onTouchStart(e) {
       if (e.touches.length === 2) {
         e.preventDefault()
@@ -89,13 +88,10 @@ export default function MindMap({ data, onChange }) {
     function onTouchMove(e) {
       if (e.touches.length === 2 && pinchRef.current) {
         e.preventDefault()
-        const scale = dist(e.touches[0], e.touches[1]) / pinchRef.current.d
-        setZoom(+Math.max(0.25, Math.min(2.5, pinchRef.current.z * scale)).toFixed(2))
+        setZoom(+Math.max(0.25, Math.min(2.5, pinchRef.current.z * dist(e.touches[0], e.touches[1]) / pinchRef.current.d)).toFixed(2))
       }
     }
-    function onTouchEnd(e) {
-      if (e.touches.length < 2) pinchRef.current = null
-    }
+    function onTouchEnd(e) { if (e.touches.length < 2) pinchRef.current = null }
     el.addEventListener('touchstart', onTouchStart, { passive: false })
     el.addEventListener('touchmove',  onTouchMove,  { passive: false })
     el.addEventListener('touchend',   onTouchEnd,   { passive: false })
@@ -141,7 +137,7 @@ export default function MindMap({ data, onChange }) {
     setSelected(null)
   }
 
-  // ── Canvas coordinate helper ─────────────────────────────────
+  // ── Canvas coordinate conversion ─────────────────────────────
   function toCanvas(clientX, clientY) {
     const rect = canvasRef.current.getBoundingClientRect()
     return { x: (clientX - rect.left) / zoomRef.current, y: (clientY - rect.top) / zoomRef.current }
@@ -216,10 +212,11 @@ export default function MindMap({ data, onChange }) {
     setConnectFrom(null)
   }
 
-  // ── Pointer drag ─────────────────────────────────────────────
+  // ── Pointer drag handlers ────────────────────────────────────
+  // Called from each node's onPointerDown (after setPointerCapture on node element)
   function handleNodePointerDown(e, nodeId) {
-    if (e.detail >= 2) return
-    e.stopPropagation()
+    if (e.detail >= 2) return           // let double-click handler take over
+    e.stopPropagation()                 // don't trigger canvas click → deselect
 
     if (connectFrom) { completeConnect(nodeId); return }
 
@@ -228,11 +225,10 @@ export default function MindMap({ data, onChange }) {
     dragOffRef.current = { x: pos.x - node.x, y: pos.y - node.y }
     setDragState({ id: nodeId, x: node.x, y: node.y })
     setSelected(`node-${nodeId}`)
-
-    // Capture pointer so pointermove fires on canvas even when finger leaves the node
-    try { canvasRef.current?.setPointerCapture(e.pointerId) } catch (_) {}
+    // pointer capture is set by the caller (inline JSX) on e.currentTarget
   }
 
+  // Shared move handler — fires on the node element (via pointer capture) OR canvas
   function handlePointerMove(e) {
     if (!dragState || pinchRef.current) return
     const { x, y } = toCanvas(e.clientX, e.clientY)
@@ -244,6 +240,7 @@ export default function MindMap({ data, onChange }) {
     }))
   }
 
+  // Shared up handler — commits position to history
   function handlePointerUp() {
     if (!dragState) return
     applyChange({
@@ -325,9 +322,7 @@ export default function MindMap({ data, onChange }) {
         {isConnecting && (
           <>
             <div className="mm-sep" />
-            <span className="mm-connect-status">
-              Tap a node to connect — Esc to cancel
-            </span>
+            <span className="mm-connect-status">Tap a node to connect — Esc to cancel</span>
             <button className="mm-btn" onClick={() => setConnectFrom(null)} title="Cancel">✕</button>
           </>
         )}
@@ -339,11 +334,10 @@ export default function MindMap({ data, onChange }) {
       <div className="mm-viewport" ref={viewportRef}>
         <div style={{
           position: 'relative',
-          width: Math.max(CANVAS_W * zoom, viewportRef.current?.clientWidth  || 0),
-          height: Math.max(CANVAS_H * zoom, viewportRef.current?.clientHeight || 0),
+          width:    Math.max(CANVAS_W * zoom, viewportRef.current?.clientWidth  || 0),
+          height:   Math.max(CANVAS_H * zoom, viewportRef.current?.clientHeight || 0),
           minWidth: '100%',
-          minHeight: '100%',
-          flexShrink: 0,
+          minHeight:'100%',
         }}>
           <div
             className="mm-canvas"
@@ -351,21 +345,19 @@ export default function MindMap({ data, onChange }) {
             style={{ transform: `scale(${zoom})`, transformOrigin: '0 0', cursor: isConnecting ? 'crosshair' : 'default' }}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
             onClick={handleCanvasClick}
           >
             {/* SVG edges */}
-            <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
+            <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none' }}>
               {edges.map(edge => {
                 const fn = nodes.find(n => n.id === edge.from)
                 const tn = nodes.find(n => n.id === edge.to)
                 if (!fn || !tn) return null
-                const fc = center(fn), tc = center(tn)
                 const isSel = selected === `edge-${edge.id}`
                 return (
                   <path
                     key={edge.id}
-                    d={bezier(fc, tc)}
+                    d={bezier(center(fn), center(tn))}
                     className={`mm-edge${isSel ? ' selected' : ''}`}
                     style={{ pointerEvents: 'stroke' }}
                     onClick={e => { e.stopPropagation(); setSelected(s => s === `edge-${edge.id}` ? null : `edge-${edge.id}`) }}
@@ -382,21 +374,22 @@ export default function MindMap({ data, onChange }) {
               const isSrc = connectFrom === node.id
               return (
                 <div key={node.id} style={{ position: 'absolute', left: pos.x, top: pos.y }}>
-                  {/* Actions bar — floats above selected node */}
+
+                  {/* Action bar — floats above selected node, matches dark aesthetic */}
                   {isSel && !isConnecting && (
-                    <div className="mm-node-actions" style={{ width: w }}>
+                    <div className="mm-node-actions" style={{ minWidth: w }}>
                       <button
                         className="mm-action-btn mm-action-delete"
                         onPointerDown={e => { e.stopPropagation(); removeNode(node.id) }}
-                        title="Delete"
                       >Delete</button>
-                      <div className="mm-action-sep" />
                       {node.type !== 'image' && (
-                        <button
-                          className="mm-action-btn"
-                          onPointerDown={e => startConnect(e, node.id)}
-                          title="Connect to another node"
-                        >Connect</button>
+                        <>
+                          <div className="mm-action-sep" />
+                          <button
+                            className="mm-action-btn"
+                            onPointerDown={e => startConnect(e, node.id)}
+                          >Connect</button>
+                        </>
                       )}
                     </div>
                   )}
@@ -404,14 +397,21 @@ export default function MindMap({ data, onChange }) {
                   <div
                     className={`mm-node type-${node.type}${isSel ? ' sel' : ''}${isSrc ? ' src' : ''}`}
                     style={{ width: w, height: h }}
-                    onPointerDown={e => handleNodePointerDown(e, node.id)}
+                    onPointerDown={e => {
+                      // setPointerCapture MUST be called on the element that received pointerdown
+                      // so that pointermove fires on THIS element during drag (even off-node)
+                      try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
+                      handleNodePointerDown(e, node.id)
+                    }}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
                     onDoubleClick={e => handleNodeDblClick(e, node)}
                   >
                     {node.type === 'image' ? (
                       <img
                         src={node.src}
                         alt={node.text}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8, pointerEvents: 'none' }}
+                        style={{ width:'100%', height:'100%', objectFit:'cover', borderRadius:8, pointerEvents:'none' }}
                       />
                     ) : editing === node.id ? (
                       <input
@@ -431,6 +431,7 @@ export default function MindMap({ data, onChange }) {
                       <span className="mm-node-text">{node.text}</span>
                     )}
                   </div>
+
                 </div>
               )
             })}

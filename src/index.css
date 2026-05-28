@@ -939,8 +939,10 @@ body {
   text-align: center;
 }
 .mm-node:active { cursor: grabbing; }
-.mm-node.sel    { box-shadow: 0 0 0 2px var(--accent), 0 4px 16px rgba(201,169,110,0.2); }
-.mm-node.src    { box-shadow: 0 0 0 2px #5e9eca, 0 4px 16px rgba(94,158,202,0.2); }
+.mm-node.sel    { box-shadow: 0 0 0 2.5px var(--accent), 0 0 28px rgba(201,169,110,0.55), 0 0 60px rgba(201,169,110,0.18); }
+.mm-node.src    { box-shadow: 0 0 0 2px #5e9eca, 0 0 22px rgba(94,158,202,0.45); }
+.mm-node.type-branch.sel { background: #3a3a3c; }
+.mm-node.type-leaf.sel   { background: #2c2c2e; }
 
 .mm-node.type-root {
   background: var(--accent);
