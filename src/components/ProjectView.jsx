@@ -1,21 +1,21 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import MindMap from './stages/MindMap'
 import Research from './stages/Research'
 import Sketches from './stages/Sketches'
 import StyleCards from './stages/StyleCards'
 import GenericStage from './stages/GenericStage'
 import Lookbook from './stages/Lookbook'
-import { calculateProgress, exportCollectionJSON } from '../utils'
+import { calculateProgress, exportCollectionJSON, exportMindMapSVG } from '../utils'
 
 const STAGES = [
-  { key: 'mindMap',      label: 'Mind Map',    icon: '◎' },
-  { key: 'research',     label: 'Research',    icon: '◈' },
-  { key: 'sketches',     label: 'Sketches',    icon: '◇' },
-  { key: 'styleCards',   label: 'Style Cards', icon: '◆' },
-  { key: 'patterns',     label: 'Patterns',    icon: '◐' },
-  { key: 'clo3d',        label: 'CLO3D',       icon: '◉' },
-  { key: 'construction', label: 'Construction',icon: '◑' },
-  { key: 'lookbook',     label: 'Lookbook',    icon: '◼' },
+  { key: 'mindMap',      label: 'Mind Map',     icon: '◎' },
+  { key: 'research',     label: 'Research',     icon: '◈' },
+  { key: 'sketches',     label: 'Sketches',     icon: '◇' },
+  { key: 'styleCards',   label: 'Style Cards',  icon: '◆' },
+  { key: 'patterns',     label: 'Patterns',     icon: '◐' },
+  { key: 'clo3d',        label: 'CLO3D',        icon: '◉' },
+  { key: 'construction', label: 'Construction', icon: '◑' },
+  { key: 'lookbook',     label: 'Lookbook',     icon: '◼' },
 ]
 
 export default function ProjectView({ collection, onUpdate, onUpdateStage, onDelete, onBack }) {
@@ -26,8 +26,19 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
   const [editColor, setEditColor] = useState(collection.coverColor)
   const [showProgressModal, setShowProgressModal] = useState(false)
   const [progressVal, setProgressVal] = useState('')
+  const [exportOpen, setExportOpen] = useState(false)
+  const exportRef = useRef(null)
 
   const progress = calculateProgress(collection)
+
+  useEffect(() => {
+    if (!exportOpen) return
+    function close(e) {
+      if (exportRef.current && !exportRef.current.contains(e.target)) setExportOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [exportOpen])
 
   function saveEdit() {
     const trimmed = editName.trim().toUpperCase()
@@ -88,7 +99,7 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
                 value={editTagline}
                 onChange={e => setEditTagline(e.target.value)}
                 placeholder="Tagline"
-                style={{ width: 220 }}
+                style={{ width: 200 }}
               />
               <input
                 type="color"
@@ -108,9 +119,11 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
                 <h2 className="project-name">{collection.name}</h2>
                 {collection.tagline && <p className="project-tagline">{collection.tagline}</p>}
               </div>
-              <button className="btn-icon" onClick={() => { setEditName(collection.name); setEditTagline(collection.tagline); setEditColor(collection.coverColor); setEditing(true) }} title="Edit">
-                ✎
-              </button>
+              <button
+                className="btn-icon"
+                onClick={() => { setEditName(collection.name); setEditTagline(collection.tagline); setEditColor(collection.coverColor); setEditing(true) }}
+                title="Edit collection"
+              >✎</button>
             </div>
           )}
         </div>
@@ -124,8 +137,36 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
               {progress}%
             </button>
           </div>
-          <button className="btn-ghost-sm" onClick={() => exportCollectionJSON(collection)}>JSON</button>
-          <button className="btn-ghost-sm" onClick={() => window.print()}>PDF</button>
+
+          {/* Export dropdown */}
+          <div className="export-wrap" ref={exportRef}>
+            <button className="btn-ghost-sm" onClick={() => setExportOpen(o => !o)}>
+              Export ↓
+            </button>
+            {exportOpen && (
+              <div className="export-menu">
+                <button onClick={() => { exportCollectionJSON(collection); setExportOpen(false) }}>
+                  Export JSON
+                </button>
+                {activeStage === 'mindMap' && (
+                  <button onClick={() => {
+                    exportMindMapSVG(
+                      collection.stages.mindMap.nodes,
+                      collection.stages.mindMap.edges,
+                      collection.name
+                    )
+                    setExportOpen(false)
+                  }}>
+                    Mind Map SVG
+                  </button>
+                )}
+                <button onClick={() => { window.print(); setExportOpen(false) }}>
+                  Print / PDF
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             className="btn-danger-sm"
             onClick={() => { if (window.confirm(`Delete "${collection.name}"?`)) onDelete() }}
