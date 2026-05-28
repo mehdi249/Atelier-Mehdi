@@ -339,36 +339,40 @@ body {
 /* ── STAGE NAV ──────────────────────────────────────────── */
 .stage-nav {
   display: flex;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 0 28px;
+  padding: 10px 20px;
   flex-shrink: 0;
-  gap: 2px;
+  gap: 4px;
+  align-items: center;
 }
 .stage-nav::-webkit-scrollbar { display: none; }
 
 .stage-tab {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 11px 14px;
+  gap: 5px;
+  padding: 7px 13px;
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 20px;
   color: var(--text-muted);
   cursor: pointer;
   font-size: 11px;
   font-family: var(--font);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
-  margin-bottom: -1px;
+  transition: background 0.15s, color 0.15s;
 }
-.stage-tab:hover { color: var(--text-sec); }
-.stage-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-.stage-icon { font-size: 12px; }
+.stage-tab:hover { background: var(--surface-2); color: var(--text); }
+.stage-tab.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-weight: 500;
+}
+.stage-icon { font-size: 11px; opacity: 0.8; }
 
 .stage-content { flex: 1; overflow-y: auto; }
 
@@ -830,7 +834,10 @@ body {
 .mm-viewport {
   flex: 1;
   overflow: auto;
-  position: relative;
+  background-color: #080808;
+  background-image: radial-gradient(circle, #2c2c2e 1px, transparent 1px);
+  background-size: 26px 26px;
+  touch-action: auto;
 }
 
 /* Canvas */
@@ -839,10 +846,58 @@ body {
   top: 0; left: 0;
   width: 1800px;
   height: 1100px;
-  background-color: #080808;
-  background-image: radial-gradient(circle, #2c2c2e 1px, transparent 1px);
-  background-size: 26px 26px;
+  background: transparent;
 }
+
+/* Node delete & connect overlays */
+.mm-node-delete {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: 2px solid #000;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  transition: transform 0.12s, background 0.12s;
+  font-family: var(--font);
+  padding: 0;
+}
+.mm-node-delete:hover { transform: scale(1.15); background: #ff6058; }
+
+.mm-node-connect {
+  position: absolute;
+  top: 50%;
+  right: -18px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #5e9eca;
+  border: 2px solid #000;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  transition: transform 0.12s, background 0.12s;
+  font-family: var(--font);
+  padding: 0;
+}
+.mm-node-connect:hover { transform: translateY(-50%) scale(1.15); background: #7ab3d8; }
 
 /* SVG edges */
 .mm-edge {
