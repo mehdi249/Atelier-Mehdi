@@ -7,7 +7,7 @@ export default function PinSetup({ onClose }) {
   // Set PIN state
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
-  const [setError, setSetError] = useState('')
+  const [pinSetError, setPinSetError] = useState('')
 
   // Change PIN state
   const [currentPinChange, setCurrentPinChange] = useState('')
@@ -28,8 +28,8 @@ export default function PinSetup({ onClose }) {
 
   async function handleSetPin() {
     const err = validatePin(newPin)
-    if (err) { setSetError(err); return }
-    if (newPin !== confirmPin) { setSetError('PINs do not match'); return }
+    if (err) { setPinSetError(err); return }
+    if (newPin !== confirmPin) { setPinSetError('PINs do not match'); return }
     await setPin(newPin)
     setSuccess('PIN set successfully')
     setTimeout(() => { onClose() }, 900)
@@ -75,7 +75,7 @@ export default function PinSetup({ onClose }) {
               pattern="[0-9]*"
               placeholder="4–6 digits"
               value={newPin}
-              onChange={e => { setNewPin(e.target.value.replace(/\D/g, '')); setSetError('') }}
+              onChange={e => { setNewPin(e.target.value.replace(/\D/g, '')); setPinSetError('') }}
               autoFocus
             />
 
@@ -88,11 +88,11 @@ export default function PinSetup({ onClose }) {
               pattern="[0-9]*"
               placeholder="Repeat PIN"
               value={confirmPin}
-              onChange={e => { setConfirmPin(e.target.value.replace(/\D/g, '')); setSetError('') }}
+              onChange={e => { setConfirmPin(e.target.value.replace(/\D/g, '')); setPinSetError('') }}
               onKeyDown={e => e.key === 'Enter' && handleSetPin()}
             />
 
-            {setError && <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{setError}</p>}
+            {pinSetError && <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{pinSetError}</p>}
 
             <div className="modal-actions">
               <button className="btn-ghost" onClick={onClose}>Cancel</button>
