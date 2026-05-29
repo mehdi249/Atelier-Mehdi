@@ -159,16 +159,22 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
       </div>
 
       <nav className="stage-nav">
-        {STAGES.map(s => (
-          <button
-            key={s.key}
-            className={`stage-tab${activeStage === s.key ? ' active' : ''}`}
-            onClick={() => setActiveStage(s.key)}
-          >
-            <span className="stage-icon">{s.icon}</span>
-            <span className="stage-label">{s.label}</span>
-          </button>
-        ))}
+        {STAGES.map(s => {
+          const isTPComplete = s.key === 'styleCards' &&
+            collection.stages.styleCards?.pieces?.length > 0 &&
+            collection.stages.styleCards.pieces.every(p => p.complete)
+          return (
+            <button
+              key={s.key}
+              className={`stage-tab${activeStage === s.key ? ' active' : ''}`}
+              onClick={() => setActiveStage(s.key)}
+            >
+              <span className="stage-icon">{s.icon}</span>
+              <span className="stage-label">{s.label}</span>
+              {isTPComplete && <span className="tp-tab-check">✓</span>}
+            </button>
+          )
+        })}
       </nav>
 
       <div className="stage-content">

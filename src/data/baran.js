@@ -121,51 +121,94 @@ export function createBaranTemplate() {
           {
             id: 'p1',
             name: 'Storm Coat',
+            season: 'AW25',
+            category: 'Outerwear',
+            fit: 'Oversized',
+            styleCode: 'BARAN-001',
             description: 'Oversized double-breasted coat with hidden storm flap and structured dropped shoulders',
+            sketchFront: null,
+            sketchBack: null,
             fabricLayers: {
-              shell: { fabric: 'Wool Cashmere Blend', weight: '600g/m²', supplier: 'Loro Piana', notes: 'Storm grey melange' },
-              lining: { fabric: 'Silk Charmeuse', weight: '19mm', supplier: 'Sablé Fabrics', notes: 'Deep slate blue' },
-              insulation: { fabric: 'PrimaLoft Gold', weight: '60g', supplier: 'PrimaLoft Inc.', notes: 'Mid-weight fill' }
+              shell: { fabric: 'Wool Cashmere Blend', weight: '600g/m²', supplier: 'Loro Piana', notes: 'Storm grey melange', swatchSrc: null },
+              lining: { fabric: 'Silk Charmeuse', weight: '19mm', supplier: 'Sablé Fabrics', notes: 'Deep slate blue', swatchSrc: null },
+              insulation: { fabric: 'PrimaLoft Gold', weight: '60g', supplier: 'PrimaLoft Inc.', notes: 'Mid-weight fill', swatchSrc: null },
             },
             constructionNotes: 'Hand-stitched lapels. Bound buttonholes in matching cashmere. Internal storm placket with hidden snap closure. Sleeve heads padded and rolled.',
-            images: []
+            colorways: [
+              { id: 'cw1', name: 'Storm Grey', hex: '#6b6e74', swatchSrc: null },
+              { id: 'cw2', name: 'Midnight Navy', hex: '#1a2744', swatchSrc: null },
+            ],
+            complete: false,
+            images: [],
           },
           {
             id: 'p2',
             name: 'Technical Jacket',
+            season: 'AW25',
+            category: 'Outerwear',
+            fit: 'Structured',
+            styleCode: 'BARAN-002',
             description: 'Structured jacket with architectural raglan shoulder seams and concealed snap placket',
+            sketchFront: null,
+            sketchBack: null,
             fabricLayers: {
-              shell: { fabric: 'Nylon Ripstop', weight: '70D', supplier: 'Toray Industries', notes: 'Slate / charcoal' },
-              lining: { fabric: 'Acetate Twill', weight: '90g/m²', supplier: 'Bemberg', notes: 'Matching charcoal' },
-              insulation: { fabric: 'Down Fill', weight: '800FP', supplier: 'Allied Feather', notes: 'Lightweight insert, baffled' }
+              shell: { fabric: 'Nylon Ripstop', weight: '70D', supplier: 'Toray Industries', notes: 'Slate / charcoal', swatchSrc: null },
+              lining: { fabric: 'Acetate Twill', weight: '90g/m²', supplier: 'Bemberg', notes: 'Matching charcoal', swatchSrc: null },
+              insulation: { fabric: 'Down Fill', weight: '800FP', supplier: 'Allied Feather', notes: 'Lightweight insert, baffled', swatchSrc: null },
             },
             constructionNotes: 'Welded seams on raglan shoulder seam. Hidden snap placket with magnetic closure back-up. Adjustable cuffs with internal grip tape.',
-            images: []
+            colorways: [
+              { id: 'cw3', name: 'Slate Charcoal', hex: '#3a3f47', swatchSrc: null },
+              { id: 'cw4', name: 'Obsidian', hex: '#1a1b1e', swatchSrc: null },
+            ],
+            complete: false,
+            images: [],
           },
           {
             id: 'p3',
             name: 'Wide Trousers',
+            season: 'AW25',
+            category: 'Bottoms',
+            fit: 'Wide Leg',
+            styleCode: 'BARAN-003',
             description: 'High-waisted wide-leg trousers with double forward pleat and side buckle adjusters',
+            sketchFront: null,
+            sketchBack: null,
             fabricLayers: {
-              shell: { fabric: 'Pinstripe Wool', weight: '380g/m²', supplier: 'Dormeuil', notes: 'Charcoal chalk stripe' },
-              lining: { fabric: 'Viscose Twill', weight: '80g/m²', supplier: 'Bemberg', notes: 'Matching charcoal' },
-              insulation: null
+              shell: { fabric: 'Pinstripe Wool', weight: '380g/m²', supplier: 'Dormeuil', notes: 'Charcoal chalk stripe', swatchSrc: null },
+              lining: { fabric: 'Viscose Twill', weight: '80g/m²', supplier: 'Bemberg', notes: 'Matching charcoal', swatchSrc: null },
+              insulation: null,
             },
             constructionNotes: 'Double forward crease pressed and stitched in. Hand-rolled and hand-stitched hem. Side buckle adjusters at waistband. Extended rise with internal stay.',
-            images: []
+            colorways: [
+              { id: 'cw5', name: 'Charcoal Stripe', hex: '#2e2e2e', swatchSrc: null },
+            ],
+            complete: false,
+            images: [],
           },
           {
             id: 'p4',
             name: 'Knit Layer',
+            season: 'AW25',
+            category: 'Knitwear',
+            fit: 'Relaxed',
+            styleCode: 'BARAN-004',
             description: 'Chunky turtleneck knit with dense structural rib and folded collar',
+            sketchFront: null,
+            sketchBack: null,
             fabricLayers: {
-              shell: { fabric: 'Merino Wool', weight: '14GG', supplier: 'Ermenegildo Zegna', notes: 'Natural off-white' },
+              shell: { fabric: 'Merino Wool', weight: '14GG', supplier: 'Ermenegildo Zegna', notes: 'Natural off-white', swatchSrc: null },
               lining: null,
-              insulation: null
+              insulation: null,
             },
             constructionNotes: 'Fully fashioned construction — no cut edges. Hand-linked seams throughout. Folded turtleneck collar, unrolled sits below jaw.',
-            images: []
-          }
+            colorways: [
+              { id: 'cw6', name: 'Off White', hex: '#f5f0e8', swatchSrc: null },
+              { id: 'cw7', name: 'Warm Oat', hex: '#d4c4a0', swatchSrc: null },
+            ],
+            complete: false,
+            images: [],
+          },
         ]
       },
       patterns: { notes: '', images: [] },
