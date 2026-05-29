@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { generateId, compressImage } from '../../utils'
 import { renderFilePreview, renderAllPages, getFileCategory, getFileBadgeLabel } from '../../filePreview'
 
@@ -8,7 +8,7 @@ const STAGES = [
   { key: 'final',     label: 'Final',      color: '#c9a96e' },
 ]
 const STAGE_ORDER = { final: 0, iteration: 1, rough: 2 }
-const STAGE_TABS = [
+const PIPELINE_STEPS = [
   { key: 'all',       label: 'All' },
   { key: 'rough',     label: 'Rough' },
   { key: 'iteration', label: 'Iterations' },
@@ -16,6 +16,7 @@ const STAGE_TABS = [
 ]
 const PRESET_TAGS = ['Top Pick', 'Needs Work', 'Selected']
 const NEXT_STAGE = { rough: 'iteration', iteration: 'final', final: 'final' }
+const CYCLE_STAGE = { rough: 'iteration', iteration: 'final', final: 'rough' }
 
 const DESIGN_FILE_ACCEPT = 'image/*,.ai,.pdf,.svg,application/pdf,image/svg+xml'
 
@@ -52,7 +53,7 @@ function familyLatestStage(rootId, allCards) {
 
 // ── ADD SKETCH MENU ──────────────────────────────────────────
 
-function AddSketchMenu({ lastCard, onSelect, onClose }) {
+function AddSketchMenu({ lastCard, lastMethodKey, onSelect, onClose }) {
   const ref = useRef(null)
   useEffect(() => {
     function handler(e) { if (ref.current && !ref.current.contains(e.target)) onClose() }
@@ -64,10 +65,10 @@ function AddSketchMenu({ lastCard, onSelect, onClose }) {
       {ADD_OPTIONS.map(opt => (
         <button
           key={opt.key}
-          className="sk-add-menu-item"
+          className={`sk-add-menu-item${opt.key === lastMethodKey ? ' last-used' : ''}`}
           onClick={() => onSelect(opt)}
           disabled={opt.key === 'duplicate' && !lastCard}
-        >{opt.label}</button>
+        >{opt.label}{opt.key === lastMethodKey ? ' ✓' : ''}</button>
       ))}
     </div>
   )
@@ -262,8 +263,9 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
 
 // ── SKETCH CARD (grid) ───────────────────────────────────────
 
-function SketchCard({ card, versionCount, latestStage, isSelected, onClick }) {
+function SketchCard({ card, versionCount, latestStage, isSelected, isFilmstripOpen, onAddVersion, onCycleStage, onToggleFilmstrip, onClick }) {
   const stage = stageFor(latestStage ?? card.stage)
+  const stageIdx = STAGES.findIndex(s => s.key === (latestStage ?? card.stage))
   return (
     <div
       className={`sk-card sk-stage-${latestStage ?? card.stage}${isSelected ? ' selected' : ''}`}
@@ -277,22 +279,43 @@ function SketchCard({ card, versionCount, latestStage, isSelected, onClick }) {
       </div>
       <div className="sk-card-footer">
         <div className="sk-card-meta">
-          <span className="sk-stage-pill" style={{ color: stage.color }}>{stage.label}</span>
+          <span
+            className="sk-stage-pill sk-stage-pill-tap"
+            style={{ color: stage.color }}
+            onClick={e => { e.stopPropagation(); onCycleStage() }}
+            title="Tap to change stage"
+          >{stage.label}</span>
           {card.fileCategory && card.fileCategory !== 'image' && (
             <span className={`sk-file-badge sk-file-badge-${card.fileCategory}`}>{getFileBadgeLabel(card.fileCategory)}</span>
           )}
           <span className="sk-version">v{card.version}</span>
         </div>
         {card.name ? <p className="sk-card-name">{card.name}</p> : null}
-        {card.note ? <p className="sk-card-note">{card.note}</p> : null}
+        {card.note ? <p className="sk-card-note">{card.note.split('\n')[0]}</p> : null}
         {versionCount > 1 && (
-          <div className="sk-ver-badge">{versionCount} versions</div>
+          <button
+            className={`sk-ver-badge${isFilmstripOpen ? ' open' : ''}`}
+            onClick={e => { e.stopPropagation(); onToggleFilmstrip() }}
+          >{versionCount} versions</button>
         )}
         {card.tags?.length > 0 && (
           <div className="sk-card-tags">
             {card.tags.map(t => <span key={t} className="sk-tag">{t}</span>)}
           </div>
         )}
+        {/* Stage progress dots */}
+        <div className="sk-stage-dots">
+          {STAGES.map((s, i) => {
+            const state = i < stageIdx ? 'past' : i === stageIdx ? 'current' : 'future'
+            return (
+              <span
+                key={s.key}
+                className={`sk-stage-dot sk-stage-dot-${state}`}
+                style={state !== 'future' ? { '--dot-color': s.color } : {}}
+              />
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -593,6 +616,10 @@ export default function Sketches({ data, onChange }) {
   const [formState, setFormState]             = useState(null)
   const [compareIds, setCompareIds]           = useState(null)
   const [undoState, setUndoState]             = useState(null)
+  const [filmstripRootId, setFilmstripRootId] = useState(null)
+  const [lastMethod, setLastMethod]           = useState(
+    () => ADD_OPTIONS.find(o => o.key === localStorage.getItem('atelier-last-add-method')) ?? ADD_OPTIONS[0]
+  )
   const undoTimerRef = useRef(null)
 
   // Reset compare whenever the selected sketch family changes
@@ -743,28 +770,45 @@ export default function Sketches({ data, onChange }) {
       <div className="sk-toolbar">
         <div className="sk-toolbar-row">
           <div className="sk-add-btn-wrap">
-            <button className="btn-primary sk-add-btn" onClick={() => setShowMenu(m => !m)}>
-              + Add Sketch ▾
-            </button>
+            <div className="sk-add-split">
+              <button
+                className="btn-primary sk-add-main"
+                onClick={() => handleMenuSelect(lastMethod)}
+                title={lastMethod.label}
+              >{lastMethod.label}</button>
+              <button
+                className="btn-primary sk-add-chevron"
+                onClick={() => setShowMenu(m => !m)}
+                aria-label="More add options"
+              >▾</button>
+            </div>
             {showMenu && (
               <AddSketchMenu
                 lastCard={lastCard}
-                onSelect={handleMenuSelect}
+                lastMethodKey={lastMethod.key}
+                onSelect={opt => {
+                  setLastMethod(opt)
+                  localStorage.setItem('atelier-last-add-method', opt.key)
+                  handleMenuSelect(opt)
+                  setShowMenu(false)
+                }}
                 onClose={() => setShowMenu(false)}
               />
             )}
           </div>
         </div>
-        <div className="sk-toolbar-row sk-tabs-row">
-          {STAGE_TABS.map(tab => (
-            <button
-              key={tab.key}
-              className={`sk-tab${stageFilter === tab.key ? ' active' : ''}`}
-              onClick={() => setStageFilter(tab.key)}
-            >
-              {tab.label}
-              {counts[tab.key] > 0 && <span className="sk-tab-count">{counts[tab.key]}</span>}
-            </button>
+        <div className="sk-pipeline-row">
+          {PIPELINE_STEPS.map((step, i) => (
+            <React.Fragment key={step.key}>
+              {i > 0 && <span className="sk-pipeline-chevron" aria-hidden>›</span>}
+              <button
+                className={`sk-pipeline-step${stageFilter === step.key ? ' active' : ''}`}
+                onClick={() => setStageFilter(step.key)}
+              >
+                <span className="sk-pipeline-label">{step.label}</span>
+                <span className="sk-pipeline-count">{counts[step.key]}</span>
+              </button>
+            </React.Fragment>
           ))}
         </div>
       </div>
@@ -792,22 +836,57 @@ export default function Sketches({ data, onChange }) {
               {sortedRoots.map(card => {
                 const family = getFamily(card.id, cards)
                 const latestStage = family[family.length - 1].stage
+                const isFilmstripOpen = filmstripRootId === card.id
                 return (
-                  <SketchCard
-                    key={card.id}
-                    card={card}
-                    versionCount={family.length}
-                    latestStage={latestStage}
-                    isSelected={selectedRootId === card.id}
-                    onClick={() => {
-                      if (selectedRootId === card.id) {
-                        closeDetail()
-                      } else {
-                        setSelectedRootId(card.id)
-                        setActiveVersionId(family[family.length - 1].id)
-                      }
-                    }}
-                  />
+                  <React.Fragment key={card.id}>
+                    <div className="sk-card-wrap">
+                      <SketchCard
+                        card={card}
+                        versionCount={family.length}
+                        latestStage={latestStage}
+                        isSelected={selectedRootId === card.id}
+                        isFilmstripOpen={isFilmstripOpen}
+                        onAddVersion={() => handleAction('next-version', card)}
+                        onCycleStage={() => updateCard({ ...card, stage: CYCLE_STAGE[card.stage] })}
+                        onToggleFilmstrip={() => setFilmstripRootId(prev => prev === card.id ? null : card.id)}
+                        onClick={() => {
+                          if (selectedRootId === card.id) {
+                            closeDetail()
+                          } else {
+                            setSelectedRootId(card.id)
+                            setActiveVersionId(family[family.length - 1].id)
+                          }
+                        }}
+                      />
+                      <button
+                        className="sk-card-quick-add"
+                        onClick={e => { e.stopPropagation(); handleAction('next-version', card) }}
+                        title="Add new version"
+                        aria-label="Add new version"
+                      >+</button>
+                    </div>
+                    {isFilmstripOpen && (
+                      <div className="sk-filmstrip">
+                        {family.map(v => (
+                          <button
+                            key={v.id}
+                            className="sk-filmstrip-thumb"
+                            onClick={() => {
+                              setSelectedRootId(card.id)
+                              setActiveVersionId(v.id)
+                              setFilmstripRootId(null)
+                            }}
+                          >
+                            {v.src
+                              ? <img src={v.src} alt={v.name || `v${v.version}`} />
+                              : <div className="sk-filmstrip-blank">✏</div>
+                            }
+                            <span className="sk-filmstrip-label">v{v.version}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </React.Fragment>
                 )
               })}
             </div>

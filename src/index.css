@@ -1569,12 +1569,6 @@ body {
   letter-spacing: 0.03em; margin-left: auto;
 }
 
-.sk-card-note {
-  font-size: 10px; color: var(--text-muted); line-height: 1.4;
-  overflow: hidden;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-}
-
 .sk-card-tags { display: flex; flex-wrap: wrap; gap: 3px; }
 .sk-tag {
   font-size: 9px; background: var(--surface-3); border-radius: 10px;
@@ -2089,6 +2083,190 @@ body {
   font-size: 12px; color: var(--text-muted); text-align: center;
 }
 
+/* Quick-add button on card wrap */
+.sk-card-wrap {
+  position: relative;
+}
+.sk-card-quick-add {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #fff;
+  font-size: 18px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 2;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.12s;
+  padding: 0;
+}
+.sk-card-wrap:hover .sk-card-quick-add { opacity: 1; }
+@media (hover: none) { .sk-card-quick-add { opacity: 1; } }
+.sk-card-quick-add:hover { background: rgba(0,0,0,0.78); }
+
+/* Stage pill tap affordance */
+.sk-stage-pill-tap { cursor: pointer; }
+.sk-stage-pill-tap:hover { text-decoration: underline dotted; }
+
+/* Stage progress dots on card */
+.sk-stage-dots {
+  display: flex; gap: 5px; align-items: center;
+  padding-top: 4px;
+}
+.sk-stage-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.sk-stage-dot-current {
+  background: var(--dot-color, var(--accent));
+  width: 8px; height: 8px;
+}
+.sk-stage-dot-past {
+  background: color-mix(in srgb, var(--dot-color, var(--accent)) 45%, transparent);
+}
+.sk-stage-dot-future {
+  background: var(--border-light);
+}
+
+/* Version filmstrip */
+.sk-filmstrip {
+  grid-column: 1 / -1;
+  display: flex; gap: 8px;
+  overflow-x: auto;
+  padding: 10px 2px 14px;
+  scrollbar-width: thin;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  animation: sk-filmstrip-in 0.18s ease;
+}
+@keyframes sk-filmstrip-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.sk-filmstrip-thumb {
+  flex-shrink: 0; width: 60px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  overflow: hidden; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 0;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.sk-filmstrip-thumb:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.sk-filmstrip-thumb img {
+  width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block;
+}
+.sk-filmstrip-blank {
+  width: 100%; aspect-ratio: 3/4;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--text-dim);
+  background: var(--surface-2);
+}
+.sk-filmstrip-label {
+  font-size: 8px; color: var(--text-dim); font-weight: 700;
+  padding: 3px 0; letter-spacing: 0.04em;
+}
+
+/* sk-ver-badge as interactive button */
+.sk-ver-badge {
+  cursor: pointer;
+  background: var(--surface-3);
+  border: none;
+  text-align: left;
+}
+.sk-ver-badge.open {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* Smart add split button */
+.sk-add-split {
+  display: flex; gap: 0;
+  margin-bottom: 12px;
+}
+.sk-add-main {
+  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm) !important;
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sk-add-chevron {
+  font-size: 12px;
+  padding: 7px 11px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0 !important;
+  border-left: 1px solid rgba(0,0,0,0.18) !important;
+  flex-shrink: 0;
+}
+
+/* Last-used menu item highlight */
+.sk-add-menu-item.last-used {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.sk-add-menu-item.last-used:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Pipeline filter row */
+.sk-pipeline-row {
+  display: flex; align-items: flex-end;
+  gap: 0; overflow-x: auto;
+  padding-bottom: 10px;
+  scrollbar-width: none;
+}
+.sk-pipeline-row::-webkit-scrollbar { display: none; }
+.sk-pipeline-step {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 4px 14px;
+  background: none; border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer; font-family: var(--font);
+  white-space: nowrap;
+  transition: border-color 0.12s;
+}
+.sk-pipeline-step.active { border-bottom-color: var(--accent); }
+.sk-pipeline-label {
+  font-size: 11px; font-weight: 500;
+  color: var(--text-muted); letter-spacing: 0.04em;
+  transition: color 0.12s;
+}
+.sk-pipeline-step.active .sk-pipeline-label {
+  color: var(--accent); font-weight: 700;
+}
+.sk-pipeline-count {
+  font-size: 13px; font-weight: 700;
+  color: var(--text-dim); margin-top: 1px;
+  transition: color 0.12s;
+}
+.sk-pipeline-step.active .sk-pipeline-count { color: var(--accent); }
+.sk-pipeline-chevron {
+  font-size: 13px; color: var(--text-dim);
+  padding: 0 2px; line-height: 1;
+  pointer-events: none; user-select: none;
+  margin-bottom: 8px; flex-shrink: 0;
+}
+
+/* Notes first-line only */
+.sk-card-note {
+  font-size: 10px; color: var(--text-muted); line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
 /* Mobile */
 @media (max-width: 680px) {
   .sk-workspace { height: auto; }
@@ -2096,6 +2274,7 @@ body {
   .sk-add-btn { width: 100%; justify-content: center; }
   .sk-tabs-row { overflow-x: auto; padding-bottom: 2px; }
   .sk-tab { white-space: nowrap; padding: 6px 10px 8px; font-size: 11px; }
+  .sk-add-split { width: 100%; }
   /* Detail panel: bottom sheet on mobile */
   .sk-detail {
     width: 100%;
