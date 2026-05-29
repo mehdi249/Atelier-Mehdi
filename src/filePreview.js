@@ -38,6 +38,31 @@ async function renderPdfLike(file, pageNum = 1, maxPx = 1400) {
   return { dataUrl: canvas.toDataURL('image/jpeg', 0.88), pageCount: pdf.numPages }
 }
 
+// Render all pages of an AI/PDF file → array of JPEG data URLs (for swipe preview in the detail panel)
+export async function renderAllPages(file, maxPx = 600) {
+  const cat = getFileCategory(file)
+  if (cat !== 'ai' && cat !== 'pdf') return null
+  const buf = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise
+  const count = Math.min(pdf.numPages, 30)
+  const pages = []
+  for (let i = 1; i <= count; i++) {
+    const pg = await pdf.getPage(i)
+    const baseVp = pg.getViewport({ scale: 1 })
+    const scale = Math.min(maxPx / baseVp.width, maxPx / baseVp.height, 2)
+    const vp = pg.getViewport({ scale })
+    const canvas = document.createElement('canvas')
+    canvas.width  = Math.round(vp.width)
+    canvas.height = Math.round(vp.height)
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    await pg.render({ canvasContext: ctx, viewport: vp }).promise
+    pages.push(canvas.toDataURL('image/jpeg', 0.75))
+  }
+  return pages
+}
+
 // Render SVG text → raster JPEG via canvas
 async function renderSvg(file, maxPx = 1400) {
   const text = await file.text()

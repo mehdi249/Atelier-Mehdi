@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { generateId, compressImage } from '../../utils'
-import { renderFilePreview, getFileCategory, getFileBadgeLabel } from '../../filePreview'
+import { renderFilePreview, renderAllPages, getFileCategory, getFileBadgeLabel } from '../../filePreview'
 
 const STAGES = [
   { key: 'rough',     label: 'Rough',      color: '#636366' },
@@ -93,12 +93,14 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
   const [currentFile, setCurrentFile] = useState(null)
   const [pageCount, setPageCount]     = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
+  const [allPages, setAllPages]       = useState(null) // array of data URLs — populated in background
 
   async function handleFiles(files) {
     for (const file of Array.from(files)) {
       const cat = getFileCategory(file)
       if (cat === 'unknown') continue
       setRendering(true)
+      setAllPages(null)
       try {
         if (cat === 'image') {
           const compressed = await compressImage(file)
@@ -115,6 +117,10 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
             setCurrentFile(file)
             setPageCount(result.pageCount ?? 1)
             setCurrentPage(1)
+            // Background-render every artboard so the saved card supports swipe in the detail panel
+            if ((result.pageCount ?? 1) > 1) {
+              renderAllPages(file).then(pages => { if (pages) setAllPages(pages) }).catch(() => {})
+            }
           }
         }
         break
@@ -245,7 +251,7 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
           <button
             className="btn-primary"
-            onClick={() => onSubmit({ name: name.trim() || 'Sketch', stage, note, src, fileCategory: fileBadge })}
+            onClick={() => onSubmit({ name: name.trim() || 'Sketch', stage, note, src, fileCategory: fileBadge, pages: allPages?.length > 1 ? allPages : null })}
             disabled={(needsFile && !src) || rendering}
           >Create Sketch</button>
         </div>
@@ -375,8 +381,19 @@ function CompareOverlay({ family, compareIds, onClose }) {
 
 function DetailPanel({ family, activeId, onSetActiveId, onAction, onUpdateCard, onClose }) {
   const [tagInput, setTagInput] = useState('')
+  const [pageIdx, setPageIdx]   = useState(0)
+  const swipeXRef               = useRef(0)
+
   const activeCard = family.find(c => c.id === activeId) ?? family[family.length - 1]
+
+  // Reset to first artboard whenever the viewed sketch version changes
+  useEffect(() => { setPageIdx(0) }, [activeId])
+
   if (!activeCard) return null
+
+  const pages    = activeCard.pages
+  const hasPages = Array.isArray(pages) && pages.length > 1
+  const displaySrc = hasPages ? pages[pageIdx] : activeCard.src
 
   const prevCard = (() => {
     const idx = family.findIndex(c => c.id === activeCard.id)
@@ -404,12 +421,41 @@ function DetailPanel({ family, activeId, onSetActiveId, onAction, onUpdateCard, 
         <button className="btn-icon" onClick={onClose} title="Close">✕</button>
       </div>
 
-      {/* Preview */}
-      <div className="sk-detail-preview">
-        {activeCard.src
-          ? <img src={activeCard.src} alt={activeCard.name || 'Sketch'} draggable={false} />
+      {/* Preview — swipeable carousel for multi-artboard files */}
+      <div
+        className="sk-detail-preview"
+        onTouchStart={e => { swipeXRef.current = e.touches[0].clientX }}
+        onTouchEnd={e => {
+          if (!hasPages) return
+          const dx = e.changedTouches[0].clientX - swipeXRef.current
+          if (dx > 40)  setPageIdx(p => Math.max(0, p - 1))
+          if (dx < -40) setPageIdx(p => Math.min(pages.length - 1, p + 1))
+        }}
+      >
+        {displaySrc
+          ? <img src={displaySrc} alt={activeCard.name || 'Sketch'} draggable={false} />
           : <div className="sk-detail-blank">✏</div>
         }
+        {hasPages && (
+          <>
+            {pageIdx > 0 && (
+              <button className="sk-swipe-btn sk-swipe-prev" onClick={() => setPageIdx(p => p - 1)}>‹</button>
+            )}
+            {pageIdx < pages.length - 1 && (
+              <button className="sk-swipe-btn sk-swipe-next" onClick={() => setPageIdx(p => p + 1)}>›</button>
+            )}
+            <div className="sk-swipe-dots">
+              {pages.map((_, i) => (
+                <button
+                  key={i}
+                  className={`sk-swipe-dot${i === pageIdx ? ' active' : ''}`}
+                  onClick={() => setPageIdx(i)}
+                  aria-label={`Artboard ${i + 1}`}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Actions — delete included here so it's always above the fold */}
@@ -659,7 +705,7 @@ export default function Sketches({ data, onChange }) {
     }
   }
 
-  function handleFormSubmit({ name, stage, note, src, fileCategory }) {
+  function handleFormSubmit({ name, stage, note, src, fileCategory, pages }) {
     const { prefill } = formState
     const newCard = {
       id: generateId(),
@@ -671,6 +717,7 @@ export default function Sketches({ data, onChange }) {
       parentId: prefill?.parentId ?? null,
       version: prefill?.version ?? 1,
       fileCategory: fileCategory ?? prefill?.fileCategory ?? 'image',
+      pages: pages ?? undefined,
       createdAt: Date.now(),
     }
     const newCards = [...cards, newCard]
