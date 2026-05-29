@@ -1,13 +1,24 @@
 import { useState } from 'react'
 import CollectionCard from './CollectionCard'
+import SyncModal from './SyncModal'
 import { createEmptyCollection } from '../data/baran'
 import { exportCollectionJSON } from '../utils'
 
-export default function Dashboard({ collections, onOpen, onAdd, onDelete }) {
+export default function Dashboard({
+  collections,
+  onOpen,
+  onAdd,
+  onDelete,
+  syncStatus,
+  syncConfig,
+  onConnectGist,
+  onDisconnectGist,
+}) {
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName] = useState('')
   const [tagline, setTagline] = useState('')
   const [color, setColor] = useState('#1a1a2e')
+  const [showSync, setShowSync] = useState(false)
 
   function handleAdd() {
     if (!name.trim()) return
@@ -22,6 +33,32 @@ export default function Dashboard({ collections, onOpen, onAdd, onDelete }) {
     setShowAdd(false)
   }
 
+  function renderSyncChip() {
+    if (!syncConfig) {
+      return (
+        <button className="sync-chip sync-idle" onClick={() => setShowSync(true)}>
+          ☁ Set up sync
+        </button>
+      )
+    }
+    if (syncStatus === 'syncing') {
+      return <span className="sync-chip sync-syncing">⟳ Syncing…</span>
+    }
+    if (syncStatus === 'error') {
+      return (
+        <button className="sync-chip sync-error" onClick={() => setShowSync(true)}>
+          ⚠ Sync error
+        </button>
+      )
+    }
+    // synced (or idle with config)
+    return (
+      <span className="sync-chip sync-synced" onClick={() => setShowSync(true)} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setShowSync(true)}>
+        ✓ Synced
+      </span>
+    )
+  }
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
@@ -29,6 +66,7 @@ export default function Dashboard({ collections, onOpen, onAdd, onDelete }) {
           <h1 className="logo">ATELIER</h1>
           <p className="logo-sub">by Mehdi</p>
         </div>
+        {renderSyncChip()}
         <button className="btn-primary" onClick={() => setShowAdd(true)}>+ New Collection</button>
       </header>
 
@@ -65,6 +103,16 @@ export default function Dashboard({ collections, onOpen, onAdd, onDelete }) {
             </div>
           </div>
         </div>
+      )}
+
+      {showSync && (
+        <SyncModal
+          syncConfig={syncConfig}
+          syncStatus={syncStatus}
+          onConnect={onConnectGist}
+          onDisconnect={onDisconnectGist}
+          onClose={() => setShowSync(false)}
+        />
       )}
 
       {collections.length === 0 ? (

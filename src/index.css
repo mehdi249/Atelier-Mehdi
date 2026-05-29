@@ -1886,6 +1886,53 @@ body {
   .sk-compare-picker { gap: 8px; flex-direction: column; }
 }
 
+/* ── SYNC ──────────────────────────────────────────────── */
+.sync-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-family: var(--font);
+  padding: 5px 11px; border-radius: 20px;
+  border: 1px solid var(--border-light);
+  background: var(--surface-2); color: var(--text-muted);
+  cursor: pointer; transition: background 0.15s, color 0.15s;
+  font-weight: 500; letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.sync-chip:hover { background: var(--surface-3); color: var(--text); }
+.sync-idle   { }
+.sync-syncing { color: var(--text-muted); cursor: default; }
+.sync-synced  { color: #63b67a; border-color: rgba(99,182,122,0.3); cursor: pointer; }
+.sync-synced:hover { background: rgba(99,182,122,0.08); }
+.sync-error   { color: var(--danger); border-color: rgba(255,69,58,0.3); }
+.sync-error:hover { background: var(--danger-dim); }
+
+/* Sync modal (reuses .modal-overlay / .modal) */
+.sync-gist-id {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface-3); border-radius: var(--radius);
+  padding: 9px 12px; font-size: 12px; font-family: monospace;
+  color: var(--text-muted); border: 1px solid var(--border);
+  word-break: break-all;
+}
+.sync-gist-id code { flex: 1; }
+.sync-copy-btn {
+  background: none; border: none; color: var(--text-dim);
+  cursor: pointer; font-size: 11px; padding: 2px 6px;
+  border-radius: 4px; font-family: var(--font);
+  transition: color 0.1s, background 0.1s;
+}
+.sync-copy-btn:hover { color: var(--text); background: var(--surface-2); }
+.sync-step { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.sync-step a { color: var(--accent); text-decoration: none; }
+.sync-step a:hover { text-decoration: underline; }
+.sync-note { font-size: 11px; color: var(--text-dim); line-height: 1.5; margin-top: 4px; }
+.sync-status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.sync-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.sync-dot.synced  { background: #63b67a; }
+.sync-dot.syncing { background: var(--accent); }
+.sync-dot.error   { background: var(--danger); }
+
 /* ── STYLE CARDS ────────────────────────────────────────── */
 .pieces-list { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; }
 
