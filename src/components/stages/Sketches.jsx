@@ -2,12 +2,19 @@ import { useState, useRef } from 'react'
 import { generateId, compressImage } from '../../utils'
 
 const STAGES = [
-  { key: 'rough',     label: 'Rough',     color: '#636366' },
-  { key: 'iteration', label: 'Iteration', color: '#5e9eca' },
-  { key: 'final',     label: 'Final',     color: '#c9a96e' },
+  { key: 'rough',     label: 'Rough',       color: '#636366' },
+  { key: 'iteration', label: 'Iterations',  color: '#5e9eca' },
+  { key: 'final',     label: 'Final',       color: '#c9a96e' },
 ]
 const STAGE_ORDER = { final: 0, iteration: 1, rough: 2 }
 const PRESET_TAGS = ['Top Pick', 'Needs Work', 'Selected']
+
+const STAGE_TABS = [
+  { key: 'all',       label: 'All' },
+  { key: 'rough',     label: 'Rough' },
+  { key: 'iteration', label: 'Iterations' },
+  { key: 'final',     label: 'Final' },
+]
 
 function stageFor(key) { return STAGES.find(s => s.key === key) ?? STAGES[0] }
 
@@ -145,64 +152,14 @@ function DetailPanel({ card, allCards, onUpdate, onDelete, onDuplicate, onClose 
   )
 }
 
-// ─── SIDEBAR ────────────────────────────────────────────────
-
-function Sidebar({ stageFilter, setStageFilter, tagFilter, setTagFilter, allTags, counts, onAddFiles }) {
-  const fileRef = useRef(null)
-
-  return (
-    <div className="sk-sidebar">
-      <div className="sk-add-zone" onClick={() => fileRef.current?.click()}>
-        <span>+ Add Sketches</span>
-        <input
-          ref={fileRef}
-          type="file" accept="image/*" multiple
-          style={{ display: 'none' }}
-          onChange={e => { onAddFiles(e.target.files); e.target.value = '' }}
-        />
-      </div>
-
-      <div className="sk-sidebar-section">
-        <span className="sk-sidebar-label">Stage</span>
-        {[{ key: 'all', label: 'All', count: counts.all }]
-          .concat(STAGES.map(s => ({ ...s, count: counts[s.key] ?? 0 })))
-          .map(s => (
-            <button
-              key={s.key}
-              className={`sk-filter-btn${stageFilter === s.key ? ' active' : ''}`}
-              onClick={() => setStageFilter(s.key)}
-            >
-              <span>{s.label}</span>
-              {s.count > 0 && <span className="sk-filter-count">{s.count}</span>}
-            </button>
-          ))}
-      </div>
-
-      {allTags.length > 0 && (
-        <div className="sk-sidebar-section">
-          <span className="sk-sidebar-label">Tags</span>
-          {allTags.map(t => (
-            <button
-              key={t}
-              className={`sk-filter-btn${tagFilter === t ? ' active' : ''}`}
-              onClick={() => setTagFilter(f => f === t ? null : t)}
-            >{t}</button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── MAIN EXPORT ────────────────────────────────────────────
 
 export default function Sketches({ data, onChange }) {
   const [stageFilter, setStageFilter] = useState('all')
-  const [tagFilter, setTagFilter] = useState(null)
   const [selected, setSelected] = useState(null)
+  const fileRef = useRef(null)
 
-  // Migrate legacy images → cards on first load
-  const cards = data.cards ?? (data.images ?? []).map((img, i) => ({
+  const cards = data.cards ?? (data.images ?? []).map(img => ({
     id: img.id,
     src: img.src,
     stage: 'rough',
@@ -252,64 +209,87 @@ export default function Sketches({ data, onChange }) {
   }
 
   const counts = {
-    all: cards.length,
-    rough: cards.filter(c => c.stage === 'rough').length,
+    all:       cards.length,
+    rough:     cards.filter(c => c.stage === 'rough').length,
     iteration: cards.filter(c => c.stage === 'iteration').length,
-    final: cards.filter(c => c.stage === 'final').length,
+    final:     cards.filter(c => c.stage === 'final').length,
   }
 
-  const allTags = [...new Set(cards.flatMap(c => c.tags))]
-
-  let visible = cards
-  if (stageFilter !== 'all') visible = visible.filter(c => c.stage === stageFilter)
-  if (tagFilter) visible = visible.filter(c => c.tags.includes(tagFilter))
+  let visible = stageFilter === 'all' ? cards : cards.filter(c => c.stage === stageFilter)
   visible = [...visible].sort((a, b) => (STAGE_ORDER[a.stage] ?? 2) - (STAGE_ORDER[b.stage] ?? 2))
 
   const selectedCard = selected ? cards.find(c => c.id === selected) : null
 
   return (
     <div className="sk-workspace">
-      <Sidebar
-        stageFilter={stageFilter}
-        setStageFilter={setStageFilter}
-        tagFilter={tagFilter}
-        setTagFilter={setTagFilter}
-        allTags={allTags}
-        counts={counts}
-        onAddFiles={handleAddFiles}
-      />
-
-      <div className="sk-main">
-        {visible.length === 0 ? (
-          <div className="empty-state">
-            {cards.length === 0
-              ? 'Add rough sketches to begin building your visual direction'
-              : 'No sketches match the current filter'}
-          </div>
-        ) : (
-          <div className="sk-grid">
-            {visible.map(card => (
-              <SketchCard
-                key={card.id}
-                card={card}
-                isSelected={selected === card.id}
-                onClick={() => setSelected(s => s === card.id ? null : card.id)}
-              />
-            ))}
-          </div>
-        )}
+      {/* Toolbar */}
+      <div className="sk-toolbar">
+        <div className="sk-toolbar-row">
+          <button className="btn-primary sk-add-btn" onClick={() => fileRef.current?.click()}>
+            + Add Sketch
+          </button>
+          <input
+            ref={fileRef}
+            type="file" accept="image/*" multiple
+            style={{ display: 'none' }}
+            onChange={e => { handleAddFiles(e.target.files); e.target.value = '' }}
+          />
+        </div>
+        <div className="sk-toolbar-row sk-tabs-row">
+          {STAGE_TABS.map(tab => (
+            <button
+              key={tab.key}
+              className={`sk-tab${stageFilter === tab.key ? ' active' : ''}`}
+              onClick={() => setStageFilter(tab.key)}
+            >
+              {tab.label}
+              {counts[tab.key] > 0 && <span className="sk-tab-count">{counts[tab.key]}</span>}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {selectedCard && (
-        <DetailPanel
-          card={selectedCard}
-          allCards={cards}
-          onUpdate={upd => updateCard(selectedCard.id, upd)}
-          onDelete={() => deleteCard(selectedCard.id)}
-          onDuplicate={duplicateCard}
-          onClose={() => setSelected(null)}
-        />
-      )}
+      {/* Body */}
+      <div className="sk-body">
+        <div className="sk-main">
+          {visible.length === 0 ? (
+            cards.length === 0 ? (
+              <div className="sk-empty">
+                <p className="sk-empty-title">Start your sketch development</p>
+                <p className="sk-empty-text">Add rough sketches, refinements, and final looks to build this collection.</p>
+                <div className="sk-empty-actions">
+                  <button className="btn-primary" onClick={() => fileRef.current?.click()}>+ Add Sketch</button>
+                  <button className="btn-ghost" onClick={() => fileRef.current?.click()}>Import from Photos</button>
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state">No sketches match the current filter</div>
+            )
+          ) : (
+            <div className="sk-grid">
+              {visible.map(card => (
+                <SketchCard
+                  key={card.id}
+                  card={card}
+                  isSelected={selected === card.id}
+                  onClick={() => setSelected(s => s === card.id ? null : card.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {selectedCard && (
+          <DetailPanel
+            card={selectedCard}
+            allCards={cards}
+            onUpdate={upd => updateCard(selectedCard.id, upd)}
+            onDelete={() => deleteCard(selectedCard.id)}
+            onDuplicate={duplicateCard}
+            onClose={() => setSelected(null)}
+          />
+        )}
+      </div>
     </div>
   )
 }
