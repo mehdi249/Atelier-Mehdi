@@ -17,11 +17,12 @@ export function getFileBadgeLabel(fileCategory) {
   return { ai: 'AI', svg: 'SVG', pdf: 'PDF', image: '', unknown: '?' }[fileCategory] ?? ''
 }
 
-// Render an AI or PDF file → compressed JPEG data URL (first page / artboard)
-async function renderPdfLike(file, maxPx = 1400) {
+// Render an AI or PDF file → compressed JPEG data URL for the given page/artboard
+async function renderPdfLike(file, pageNum = 1, maxPx = 1400) {
   const buf = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise
-  const page = await pdf.getPage(1)
+  const safePage = Math.max(1, Math.min(pageNum, pdf.numPages))
+  const page = await pdf.getPage(safePage)
   const baseVp = page.getViewport({ scale: 1 })
   const scale = Math.min(maxPx / baseVp.width, maxPx / baseVp.height, 2)
   const vp = page.getViewport({ scale })
@@ -65,13 +66,14 @@ async function renderSvg(file, maxPx = 1400) {
 }
 
 // Main entry: accepts any supported file, returns { dataUrl, pageCount, fileCategory }
+// Pass pageNum (1-based) to render a specific artboard/page for AI/PDF files.
 // Returns null for unknown/unsupported types.
-export async function renderFilePreview(file) {
+export async function renderFilePreview(file, pageNum = 1) {
   const cat = getFileCategory(file)
   try {
     if (cat === 'image') return null          // caller uses compressImage
     if (cat === 'ai' || cat === 'pdf') {
-      const { dataUrl, pageCount } = await renderPdfLike(file)
+      const { dataUrl, pageCount } = await renderPdfLike(file, pageNum)
       return { dataUrl, pageCount, fileCategory: cat }
     }
     if (cat === 'svg') {

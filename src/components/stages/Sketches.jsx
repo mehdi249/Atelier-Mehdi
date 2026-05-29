@@ -88,8 +88,11 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
     if (needsFile) fileRef.current?.click()
   }, [])
 
-  const [rendering, setRendering] = useState(false)
-  const [fileBadge, setFileBadge] = useState(prefill?.fileCategory ?? null)
+  const [rendering, setRendering]     = useState(false)
+  const [fileBadge, setFileBadge]     = useState(prefill?.fileCategory ?? null)
+  const [currentFile, setCurrentFile] = useState(null)
+  const [pageCount, setPageCount]     = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
 
   async function handleFiles(files) {
     for (const file of Array.from(files)) {
@@ -101,11 +104,17 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
           const compressed = await compressImage(file)
           setSrc(compressed)
           setFileBadge('image')
+          setCurrentFile(null)
+          setPageCount(1)
+          setCurrentPage(1)
         } else {
-          const result = await renderFilePreview(file)
+          const result = await renderFilePreview(file, 1)
           if (result?.dataUrl) {
             setSrc(result.dataUrl)
             setFileBadge(result.fileCategory)
+            setCurrentFile(file)
+            setPageCount(result.pageCount ?? 1)
+            setCurrentPage(1)
           }
         }
         break
@@ -115,6 +124,23 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
       }
     }
   }
+
+  async function navigatePage(dir) {
+    if (!currentFile || rendering) return
+    const next = currentPage + dir
+    if (next < 1 || next > pageCount) return
+    setRendering(true)
+    setCurrentPage(next)
+    try {
+      const result = await renderFilePreview(currentFile, next)
+      if (result?.dataUrl) setSrc(result.dataUrl)
+    } catch (_) {
+    } finally {
+      setRendering(false)
+    }
+  }
+
+  const multiPage = pageCount > 1
 
   return (
     <div className="sk-form-overlay" onPointerDown={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -131,12 +157,28 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
             style={{ cursor: (src || rendering) ? 'default' : 'pointer' }}
           >
             {rendering
-              ? <div className="sk-form-drop"><span>Rendering preview…</span></div>
+              ? <div className="sk-form-drop"><span>Rendering…</span></div>
               : src
                 ? <>
                     <img src={src} alt="Preview" />
                     {fileBadge && fileBadge !== 'image' && (
                       <span className={`sk-file-badge sk-file-badge-${fileBadge}`}>{getFileBadgeLabel(fileBadge)}</span>
+                    )}
+                    {/* Artboard navigation for multi-page AI/PDF files */}
+                    {multiPage && (
+                      <div className="sk-page-nav">
+                        <button
+                          className="sk-page-nav-btn"
+                          onClick={e => { e.stopPropagation(); navigatePage(-1) }}
+                          disabled={currentPage <= 1}
+                        >‹</button>
+                        <span className="sk-page-count">Artboard {currentPage} / {pageCount}</span>
+                        <button
+                          className="sk-page-nav-btn"
+                          onClick={e => { e.stopPropagation(); navigatePage(1) }}
+                          disabled={currentPage >= pageCount}
+                        >›</button>
+                      </div>
                     )}
                   </>
                 : <div className="sk-form-drop">
@@ -251,45 +293,64 @@ function SketchCard({ card, versionCount, latestStage, isSelected, onClick }) {
 }
 
 // ── COMPARE OVERLAY ──────────────────────────────────────────
-// Simple: show the passed pair, prev/next navigation through adjacent pairs.
-// No per-slot pickers — removes the source of glitches.
+// Two independent slot pickers (Left / Right), each showing v1…vN chips.
+// Selecting the same version for both auto-advances the other slot.
 
 function CompareOverlay({ family, compareIds, onClose }) {
-  const initialIdx = Math.max(0, family.findIndex(c => c.id === compareIds[0]))
-  const [pairStart, setPairStart] = useState(initialIdx)
+  const [ids, setIds] = useState(compareIds)
+  const cards = ids.map(id => family.find(c => c.id === id)).filter(Boolean)
 
-  const cardA = family[pairStart]
-  const cardB = family[pairStart + 1] ?? family[pairStart]
-  const canPrev = pairStart > 0
-  const canNext = pairStart + 2 < family.length
+  function pick(slot, id) {
+    setIds(prev => {
+      const next = [...prev]
+      next[slot] = id
+      // If both slots land on the same card, shift the other slot
+      if (next[0] === next[1]) {
+        const other = slot === 0 ? 1 : 0
+        const idx = family.findIndex(c => c.id === id)
+        const fallback = idx > 0 ? family[idx - 1] : family[idx + 1]
+        if (fallback) next[other] = fallback.id
+      }
+      return next
+    })
+  }
 
   return (
     <div className="sk-compare-overlay">
       <div className="sk-compare-header">
         <span>Compare Versions</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {family.length > 2 && (
-            <>
-              <button
-                className="btn-icon"
-                onClick={() => setPairStart(p => p - 1)}
-                disabled={!canPrev}
-                title="Previous pair"
-              >←</button>
-              <button
-                className="btn-icon"
-                onClick={() => setPairStart(p => p + 1)}
-                disabled={!canNext}
-                title="Next pair"
-              >→</button>
-            </>
-          )}
-          <button className="btn-ghost" onClick={onClose}>Done</button>
-        </div>
+        <button className="btn-ghost" onClick={onClose}>Done</button>
+      </div>
+
+      {/* Per-slot version chips */}
+      <div className="sk-compare-picker">
+        {[0, 1].map(slot => (
+          <div key={slot} className="sk-compare-slot">
+            <span className="sk-compare-slot-label">{slot === 0 ? 'Left' : 'Right'}</span>
+            <div className="sk-compare-chips">
+              {family.map(c => {
+                const s = stageFor(c.stage)
+                const active = ids[slot] === c.id
+                return (
+                  <button
+                    key={c.id}
+                    className={`sk-compare-chip${active ? ' active' : ''}`}
+                    style={{ '--stage-color': s.color }}
+                    onClick={() => pick(slot, c.id)}
+                    title={c.name || `Version ${c.version}`}
+                  >
+                    <span className="sk-compare-chip-v">v{c.version}</span>
+                    {c.name && <span className="sk-compare-chip-name">{c.name}</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="sk-compare-grid">
-        {[cardA, cardB].filter(Boolean).map(card => {
+        {cards.map(card => {
           const s = stageFor(card.stage)
           return (
             <div key={card.id} className="sk-compare-pane">
@@ -351,7 +412,7 @@ function DetailPanel({ family, activeId, onSetActiveId, onAction, onUpdateCard, 
         }
       </div>
 
-      {/* Actions — delete is here so it's always visible above the fold */}
+      {/* Actions — delete included here so it's always above the fold */}
       <div className="sk-detail-actions-bar">
         <button className="btn-ghost-sm" onClick={() => onAction('next-version', activeCard)} title="Upload new version">+ Version</button>
         <button className="btn-ghost-sm" onClick={() => onAction('duplicate-iter', activeCard)} title="Copy as next iteration">Duplicate</button>
@@ -488,10 +549,9 @@ export default function Sketches({ data, onChange }) {
   const [undoState, setUndoState]             = useState(null)
   const undoTimerRef = useRef(null)
 
-  // Reset compare when switching to a different sketch family
+  // Reset compare whenever the selected sketch family changes
   useEffect(() => { setCompareIds(null) }, [selectedRootId])
 
-  // Cleanup undo timer on unmount
   useEffect(() => () => clearTimeout(undoTimerRef.current), [])
 
   const cards = data.cards ?? (data.images ?? []).map(img => ({
@@ -501,7 +561,7 @@ export default function Sketches({ data, onChange }) {
 
   function save(newCards) { onChange({ ...data, cards: newCards }) }
 
-  const roots   = cards.filter(c => !c.parentId)
+  const roots    = cards.filter(c => !c.parentId)
   const lastCard = cards[cards.length - 1] ?? null
 
   const filteredRoots = stageFilter === 'all'
@@ -558,12 +618,10 @@ export default function Sketches({ data, onChange }) {
       const prevCards = [...cards]
       let newCards = cards.filter(c => c.id !== card.id)
       if (!card.parentId) {
-        // Deleting root: promote direct children to roots
         newCards = newCards.map(c => c.parentId === card.id ? { ...c, parentId: null } : c)
       }
       save(newCards)
 
-      // Show undo toast for 5 seconds
       setUndoState({ cards: prevCards, label: card.name || 'Sketch' })
       clearTimeout(undoTimerRef.current)
       undoTimerRef.current = setTimeout(() => setUndoState(null), 5000)
@@ -632,8 +690,6 @@ export default function Sketches({ data, onChange }) {
     setActiveVersionId(null)
   }
 
-  function openEmptyStateMenu() { setShowMenu(true) }
-
   return (
     <div className="sk-workspace">
       {/* Toolbar */}
@@ -666,7 +722,7 @@ export default function Sketches({ data, onChange }) {
         </div>
       </div>
 
-      {/* Body — detail panel is now a fixed overlay, not a flex sibling */}
+      {/* Grid */}
       <div className="sk-body">
         <div className="sk-main">
           {sortedRoots.length === 0 ? (
@@ -675,7 +731,7 @@ export default function Sketches({ data, onChange }) {
                 <p className="sk-empty-title">Start your sketch development</p>
                 <p className="sk-empty-text">Add rough sketches, refinements, and final looks to build this collection.</p>
                 <div className="sk-empty-actions">
-                  <button className="btn-primary" onClick={openEmptyStateMenu}>+ Add Sketch</button>
+                  <button className="btn-primary" onClick={() => setShowMenu(true)}>+ Add Sketch</button>
                   <button className="btn-ghost" onClick={() => {
                     setFormState({ option: ADD_OPTIONS[0], prefill: { name: '', stage: 'rough', src: null, parentId: null, version: 1 } })
                   }}>Import from Photos</button>
@@ -712,7 +768,7 @@ export default function Sketches({ data, onChange }) {
         </div>
       </div>
 
-      {/* Detail panel — fixed overlay so it never pushes content down */}
+      {/* Detail panel — fixed overlay, never pushes the grid down */}
       {selectedRootId && selectedFamily.length > 0 && (
         <>
           <div className="sk-detail-backdrop" onClick={closeDetail} />

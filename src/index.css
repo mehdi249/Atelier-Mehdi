@@ -1924,22 +1924,109 @@ body {
   font-size: 13px; font-weight: 600; color: var(--text);
 }
 .sk-compare-picker {
-  display: flex; gap: 24px; width: 100%; max-width: 860px;
+  display: flex;
+  gap: 16px;
+  width: 100%;
+  max-width: 860px;
 }
-.sk-compare-slot-pick {
-  flex: 1; display: flex; gap: 4px; flex-wrap: wrap;
+
+.sk-compare-slot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.sk-compare-pick-btn {
-  background: var(--surface-2); border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm); color: var(--text-muted);
-  font-size: 11px; font-family: var(--font); padding: 3px 9px;
-  cursor: pointer; transition: background 0.1s, color 0.1s, border-color 0.1s;
+
+.sk-compare-slot-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
 }
-.sk-compare-pick-btn:hover { color: var(--text); }
-.sk-compare-pick-btn.active {
-  background: color-mix(in srgb, var(--stage-color, var(--accent)) 14%, transparent);
+
+.sk-compare-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.sk-compare-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.sk-compare-chip:hover {
+  color: var(--text);
+  background: var(--surface-3);
+  border-color: var(--border-light);
+}
+.sk-compare-chip.active {
+  background: color-mix(in srgb, var(--stage-color, var(--accent)) 15%, transparent);
   border-color: var(--stage-color, var(--accent));
   color: var(--stage-color, var(--accent));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--stage-color, var(--accent)) 30%, transparent);
+}
+
+.sk-compare-chip-v {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.sk-compare-chip-name {
+  font-size: 10px;
+  color: var(--text-dim);
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sk-compare-chip.active .sk-compare-chip-name {
+  color: color-mix(in srgb, var(--stage-color, var(--accent)) 70%, transparent);
+}
+
+/* Artboard navigation in import form preview */
+.sk-page-nav {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.72));
+}
+
+.sk-page-nav-btn {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 50%;
+  color: #fff;
+  width: 28px; height: 28px;
+  font-size: 16px; font-family: var(--font);
+  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.sk-page-nav-btn:hover:not(:disabled) { background: rgba(255,255,255,0.22); }
+.sk-page-nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+.sk-page-count {
+  font-size: 11px;
+  color: rgba(255,255,255,0.85);
+  letter-spacing: 0.04em;
+  font-weight: 500;
+  white-space: nowrap;
 }
 .sk-compare-grid {
   display: flex; gap: 20px; width: 100%; max-width: 860px;
@@ -1979,6 +2066,38 @@ body {
   }
   .sk-compare-grid { flex-direction: column; }
   .sk-undo-toast { bottom: 16px; max-width: calc(100vw - 32px); }
+}
+
+/* ── PULL-TO-REFRESH ────────────────────────────────────── */
+.ptr-bar {
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 7px;
+  padding-bottom: 8px;
+  flex-shrink: 0;
+  background: var(--bg);
+  border-bottom: 1px solid transparent;
+}
+.ptr-bar.ptr-refreshing { border-bottom-color: var(--border); }
+
+.ptr-icon {
+  font-size: 16px;
+  color: var(--accent);
+  line-height: 1;
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+@keyframes ptr-rotate { to { transform: rotate(360deg); } }
+.ptr-spin { animation: ptr-rotate 0.65s linear infinite; }
+
+.ptr-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
 }
 
 /* ── SYNC ──────────────────────────────────────────────── */
