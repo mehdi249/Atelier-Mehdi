@@ -47,17 +47,21 @@ export function useStore() {
   useEffect(() => {
     const cfg = loadSyncConfig()
     if (!cfg) return
+    skipNextPush.current = true   // block any push until fetch resolves
     setSyncStatus('syncing')
     fetchFromGist(cfg.token, cfg.gistId)
       .then(data => {
         if (data?.collections?.length > 0) {
-          skipNextPush.current = true
+          // skipNextPush is already true from above
           setState(data)
+        } else {
+          skipNextPush.current = false  // no data, re-enable pushes
         }
         setSyncStatus('synced')
       })
       .catch(err => {
         console.warn('Gist fetch on mount failed:', err)
+        skipNextPush.current = false  // fetch failed, re-enable pushes
         setSyncStatus('error')
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,6 +113,23 @@ export function useStore() {
     return { gistId }
   }, [])
 
+  const pullFromGist = useCallback(async () => {
+    const cfg = syncConfigRef.current
+    if (!cfg) return
+    setSyncStatus('syncing')
+    try {
+      const data = await fetchFromGist(cfg.token, cfg.gistId)
+      if (data?.collections?.length > 0) {
+        skipNextPush.current = true
+        setState(data)
+      }
+      setSyncStatus('synced')
+    } catch (err) {
+      console.warn('Manual pull failed:', err)
+      setSyncStatus('error')
+    }
+  }, [])
+
   const disconnectGist = useCallback(() => {
     saveSyncConfig(null)
     setSyncConfig(null)
@@ -150,6 +171,7 @@ export function useStore() {
     syncConfig,
     syncStatus,
     connectGist,
+    pullFromGist,
     disconnectGist,
   }
 }

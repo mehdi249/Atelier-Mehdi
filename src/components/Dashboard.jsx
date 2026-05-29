@@ -12,6 +12,7 @@ export default function Dashboard({
   syncStatus,
   syncConfig,
   onConnectGist,
+  onPullFromGist,
   onDisconnectGist,
 }) {
   const [showAdd, setShowAdd] = useState(false)
@@ -110,6 +111,7 @@ export default function Dashboard({
           syncConfig={syncConfig}
           syncStatus={syncStatus}
           onConnect={onConnectGist}
+          onPull={onPullFromGist}
           onDisconnect={onDisconnectGist}
           onClose={() => setShowSync(false)}
         />

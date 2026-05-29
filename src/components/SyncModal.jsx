@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function SyncModal({ syncConfig, syncStatus, onConnect, onDisconnect, onClose }) {
+export default function SyncModal({ syncConfig, syncStatus, onConnect, onPull, onDisconnect, onClose }) {
   const [token, setToken] = useState('')
   const [gistId, setGistId] = useState('')
   const [loading, setLoading] = useState(false)
@@ -66,14 +66,23 @@ export default function SyncModal({ syncConfig, syncStatus, onConnect, onDisconn
               To sync another device, enter this Gist ID when connecting there.
             </p>
 
-            <div className="modal-actions">
+            <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
               <button
                 className="btn-ghost-sm danger"
                 onClick={handleDisconnect}
               >
                 Disconnect
               </button>
-              <button className="btn-primary" onClick={onClose}>Close</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="btn-ghost"
+                  onClick={async () => { await onPull(); onClose() }}
+                  title="Force-load the latest data from the Gist"
+                >
+                  Pull Latest
+                </button>
+                <button className="btn-primary" onClick={onClose}>Done</button>
+              </div>
             </div>
           </>
         ) : (

@@ -13,6 +13,7 @@ export default function App() {
     syncStatus,
     syncConfig,
     connectGist,
+    pullFromGist,
     disconnectGist,
   } = useStore()
   const [currentView, setCurrentView] = useState('dashboard')
@@ -27,6 +28,7 @@ export default function App() {
         syncStatus={syncStatus}
         syncConfig={syncConfig}
         onConnectGist={connectGist}
+        onPullFromGist={pullFromGist}
         onDisconnectGist={disconnectGist}
       />
     )
