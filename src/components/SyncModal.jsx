@@ -95,21 +95,23 @@ export default function SyncModal({ syncConfig, syncStatus, onConnect, onPull, o
             <label>Step 1 — GitHub Token</label>
             <p className="sync-step">
               <a
-                href="https://github.com/settings/tokens/new?scopes=gist&description=Atelier+Mehdi"
+                href="https://github.com/settings/personal-access-tokens/new"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Create a token at GitHub → Settings → Tokens (with 'gist' scope)
+                Create a fine-grained personal access token at GitHub
               </a>
+              {' '}— more secure than classic tokens. Set an expiration of 30–90 days (you'll get an email reminder before it expires). Grant only <strong style={{ color: 'var(--text)', fontWeight: 600 }}>Gists: Read and Write</strong> — nothing else needed.
             </p>
             <input
               className="input"
               type="password"
-              placeholder="ghp_..."
+              placeholder="github_pat_..."
               value={token}
               onChange={e => setToken(e.target.value)}
               style={{ marginTop: 8 }}
             />
+            <p className="sync-note">Your token is stored only on this device. Never share it.</p>
 
             <label>Step 2 — Gist ID (leave blank to create a new one)</label>
             <input

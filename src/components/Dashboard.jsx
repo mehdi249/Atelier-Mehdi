@@ -3,6 +3,7 @@ import CollectionCard from './CollectionCard'
 import SyncModal from './SyncModal'
 import { createEmptyCollection } from '../data/baran'
 import { exportCollectionJSON } from '../utils'
+import { hasPinSet } from '../security'
 
 export default function Dashboard({
   collections,
@@ -14,6 +15,8 @@ export default function Dashboard({
   onConnectGist,
   onPullFromGist,
   onDisconnectGist,
+  onLock,
+  onOpenSecurity,
 }) {
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName] = useState('')
@@ -68,7 +71,27 @@ export default function Dashboard({
           <p className="logo-sub">by Mehdi</p>
         </div>
         {renderSyncChip()}
-        <button className="btn-primary" onClick={() => setShowAdd(true)}>+ New Collection</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {hasPinSet() && (
+            <button
+              className="btn-icon"
+              title="Lock app"
+              onClick={onLock}
+              style={{ fontSize: 17 }}
+            >
+              🔒
+            </button>
+          )}
+          <button
+            className="btn-icon"
+            title="Security settings"
+            onClick={onOpenSecurity}
+            style={{ fontSize: 17 }}
+          >
+            ⚙
+          </button>
+          <button className="btn-primary" onClick={() => setShowAdd(true)}>+ New Collection</button>
+        </div>
       </header>
 
       {showAdd && (
