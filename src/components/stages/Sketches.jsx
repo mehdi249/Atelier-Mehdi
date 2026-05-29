@@ -17,7 +17,6 @@ const STAGE_TABS = [
 const PRESET_TAGS = ['Top Pick', 'Needs Work', 'Selected']
 const NEXT_STAGE = { rough: 'iteration', iteration: 'final', final: 'final' }
 
-// Accept images + AI + PDF + SVG
 const DESIGN_FILE_ACCEPT = 'image/*,.ai,.pdf,.svg,application/pdf,image/svg+xml'
 
 const ADD_OPTIONS = [
@@ -252,40 +251,45 @@ function SketchCard({ card, versionCount, latestStage, isSelected, onClick }) {
 }
 
 // ── COMPARE OVERLAY ──────────────────────────────────────────
+// Simple: show the passed pair, prev/next navigation through adjacent pairs.
+// No per-slot pickers — removes the source of glitches.
 
 function CompareOverlay({ family, compareIds, onClose }) {
-  const [ids, setIds] = useState(compareIds)
-  const cards = ids.map(id => family.find(c => c.id === id)).filter(Boolean)
+  const initialIdx = Math.max(0, family.findIndex(c => c.id === compareIds[0]))
+  const [pairStart, setPairStart] = useState(initialIdx)
+
+  const cardA = family[pairStart]
+  const cardB = family[pairStart + 1] ?? family[pairStart]
+  const canPrev = pairStart > 0
+  const canNext = pairStart + 2 < family.length
 
   return (
     <div className="sk-compare-overlay">
       <div className="sk-compare-header">
         <span>Compare Versions</span>
-        <button className="btn-ghost" onClick={onClose}>Done</button>
-      </div>
-
-      {/* Version picker */}
-      <div className="sk-compare-picker">
-        {[0, 1].map(slot => (
-          <div key={slot} className="sk-compare-slot-pick">
-            {family.map(c => {
-              const s = stageFor(c.stage)
-              const active = ids[slot] === c.id
-              return (
-                <button
-                  key={c.id}
-                  className={`sk-compare-pick-btn${active ? ' active' : ''}`}
-                  style={{ '--stage-color': s.color, borderColor: active ? s.color : undefined }}
-                  onClick={() => setIds(prev => { const next = [...prev]; next[slot] = c.id; return next })}
-                >v{c.version}</button>
-              )
-            })}
-          </div>
-        ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {family.length > 2 && (
+            <>
+              <button
+                className="btn-icon"
+                onClick={() => setPairStart(p => p - 1)}
+                disabled={!canPrev}
+                title="Previous pair"
+              >←</button>
+              <button
+                className="btn-icon"
+                onClick={() => setPairStart(p => p + 1)}
+                disabled={!canNext}
+                title="Next pair"
+              >→</button>
+            </>
+          )}
+          <button className="btn-ghost" onClick={onClose}>Done</button>
+        </div>
       </div>
 
       <div className="sk-compare-grid">
-        {cards.map(card => {
+        {[cardA, cardB].filter(Boolean).map(card => {
           const s = stageFor(card.stage)
           return (
             <div key={card.id} className="sk-compare-pane">
@@ -347,7 +351,7 @@ function DetailPanel({ family, activeId, onSetActiveId, onAction, onUpdateCard, 
         }
       </div>
 
-      {/* Actions */}
+      {/* Actions — delete is here so it's always visible above the fold */}
       <div className="sk-detail-actions-bar">
         <button className="btn-ghost-sm" onClick={() => onAction('next-version', activeCard)} title="Upload new version">+ Version</button>
         <button className="btn-ghost-sm" onClick={() => onAction('duplicate-iter', activeCard)} title="Copy as next iteration">Duplicate</button>
@@ -360,6 +364,12 @@ function DetailPanel({ family, activeId, onSetActiveId, onAction, onUpdateCard, 
         {prevCard && (
           <button className="btn-ghost-sm" onClick={() => onAction('compare', activeCard, prevCard)} title="Compare with previous version">Compare</button>
         )}
+        <button
+          className="btn-ghost-sm danger"
+          style={{ marginLeft: 'auto' }}
+          onClick={() => onAction('delete', activeCard)}
+          title="Delete this version"
+        >Delete</button>
       </div>
 
       {/* Version timeline */}
@@ -462,10 +472,6 @@ function DetailPanel({ family, activeId, onSetActiveId, onAction, onUpdateCard, 
           </div>
         </div>
       </div>
-
-      <div className="sk-detail-actions">
-        <button className="btn-remove-sm" onClick={() => onAction('delete', activeCard)}>Delete Version</button>
-      </div>
     </div>
   )
 }
@@ -479,6 +485,14 @@ export default function Sketches({ data, onChange }) {
   const [showMenu, setShowMenu]               = useState(false)
   const [formState, setFormState]             = useState(null)
   const [compareIds, setCompareIds]           = useState(null)
+  const [undoState, setUndoState]             = useState(null)
+  const undoTimerRef = useRef(null)
+
+  // Reset compare when switching to a different sketch family
+  useEffect(() => { setCompareIds(null) }, [selectedRootId])
+
+  // Cleanup undo timer on unmount
+  useEffect(() => () => clearTimeout(undoTimerRef.current), [])
 
   const cards = data.cards ?? (data.images ?? []).map(img => ({
     id: img.id, src: img.src, name: '', stage: 'rough', version: 1,
@@ -490,7 +504,6 @@ export default function Sketches({ data, onChange }) {
   const roots   = cards.filter(c => !c.parentId)
   const lastCard = cards[cards.length - 1] ?? null
 
-  // Filter roots by latest stage in their family
   const filteredRoots = stageFilter === 'all'
     ? roots
     : roots.filter(r => familyLatestStage(r.id, cards) === stageFilter)
@@ -542,12 +555,19 @@ export default function Sketches({ data, onChange }) {
     } else if (type === 'compare') {
       setCompareIds([card.id, card2.id])
     } else if (type === 'delete') {
+      const prevCards = [...cards]
       let newCards = cards.filter(c => c.id !== card.id)
       if (!card.parentId) {
         // Deleting root: promote direct children to roots
         newCards = newCards.map(c => c.parentId === card.id ? { ...c, parentId: null } : c)
       }
       save(newCards)
+
+      // Show undo toast for 5 seconds
+      setUndoState({ cards: prevCards, label: card.name || 'Sketch' })
+      clearTimeout(undoTimerRef.current)
+      undoTimerRef.current = setTimeout(() => setUndoState(null), 5000)
+
       const remaining = getFamily(selectedRootId, newCards)
       if (remaining.length === 0) {
         setSelectedRootId(null)
@@ -607,6 +627,11 @@ export default function Sketches({ data, onChange }) {
     setFormState(null)
   }
 
+  function closeDetail() {
+    setSelectedRootId(null)
+    setActiveVersionId(null)
+  }
+
   function openEmptyStateMenu() { setShowMenu(true) }
 
   return (
@@ -641,7 +666,7 @@ export default function Sketches({ data, onChange }) {
         </div>
       </div>
 
-      {/* Body */}
+      {/* Body — detail panel is now a fixed overlay, not a flex sibling */}
       <div className="sk-body">
         <div className="sk-main">
           {sortedRoots.length === 0 ? (
@@ -673,8 +698,7 @@ export default function Sketches({ data, onChange }) {
                     isSelected={selectedRootId === card.id}
                     onClick={() => {
                       if (selectedRootId === card.id) {
-                        setSelectedRootId(null)
-                        setActiveVersionId(null)
+                        closeDetail()
                       } else {
                         setSelectedRootId(card.id)
                         setActiveVersionId(family[family.length - 1].id)
@@ -686,18 +710,22 @@ export default function Sketches({ data, onChange }) {
             </div>
           )}
         </div>
+      </div>
 
-        {selectedRootId && selectedFamily.length > 0 && (
+      {/* Detail panel — fixed overlay so it never pushes content down */}
+      {selectedRootId && selectedFamily.length > 0 && (
+        <>
+          <div className="sk-detail-backdrop" onClick={closeDetail} />
           <DetailPanel
             family={selectedFamily}
             activeId={activeId}
             onSetActiveId={setActiveVersionId}
             onAction={handleAction}
             onUpdateCard={updateCard}
-            onClose={() => { setSelectedRootId(null); setActiveVersionId(null) }}
+            onClose={closeDetail}
           />
-        )}
-      </div>
+        </>
+      )}
 
       {/* Add form modal */}
       {formState && (
@@ -716,6 +744,28 @@ export default function Sketches({ data, onChange }) {
           compareIds={compareIds}
           onClose={() => setCompareIds(null)}
         />
+      )}
+
+      {/* Undo toast */}
+      {undoState && (
+        <div className="sk-undo-toast">
+          <span className="sk-undo-label">"{undoState.label}" deleted</span>
+          <button
+            className="sk-undo-btn"
+            onClick={() => {
+              save(undoState.cards)
+              setUndoState(null)
+              clearTimeout(undoTimerRef.current)
+            }}
+          >Undo</button>
+          <button
+            className="sk-undo-dismiss"
+            onClick={() => {
+              setUndoState(null)
+              clearTimeout(undoTimerRef.current)
+            }}
+          >✕</button>
+        </div>
       )}
     </div>
   )

@@ -1581,13 +1581,26 @@ body {
   padding: 2px 5px; color: var(--text-dim); letter-spacing: 0.03em;
 }
 
-/* Right detail panel */
+/* Detail panel — fixed right overlay so it never pushes the grid down */
 .sk-detail {
-  width: 264px; flex-shrink: 0;
+  position: fixed;
+  right: 0; top: 0;
+  width: 300px;
+  height: 100%;
+  z-index: 80;
   border-left: 1px solid var(--border);
   display: flex; flex-direction: column;
   overflow-y: auto;
   background: var(--surface);
+  box-shadow: -8px 0 40px rgba(0,0,0,0.55);
+}
+
+.sk-detail-backdrop {
+  position: fixed; inset: 0;
+  z-index: 79;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
 .sk-detail-header {
@@ -1675,6 +1688,64 @@ body {
   display: flex; align-items: center; gap: 8px;
   flex-shrink: 0;
 }
+
+/* Undo toast */
+.sk-undo-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-light);
+  border-radius: 24px;
+  padding: 10px 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  white-space: nowrap;
+  animation: sk-toast-in 0.2s ease;
+}
+
+@keyframes sk-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.sk-undo-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.sk-undo-btn {
+  background: var(--accent);
+  border: none;
+  border-radius: 12px;
+  color: #000;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font);
+  padding: 4px 12px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.12s;
+}
+.sk-undo-btn:hover { background: var(--accent-hover); }
+
+.sk-undo-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-family: var(--font);
+  line-height: 1;
+  transition: color 0.12s;
+}
+.sk-undo-dismiss:hover { color: var(--text-muted); }
 
 /* Add Sketch menu */
 .sk-add-btn-wrap { position: relative; }
@@ -1896,11 +1967,18 @@ body {
   .sk-add-btn { width: 100%; justify-content: center; }
   .sk-tabs-row { overflow-x: auto; padding-bottom: 2px; }
   .sk-tab { white-space: nowrap; padding: 6px 10px 8px; font-size: 11px; }
-  .sk-body { flex-direction: column; }
-  .sk-detail { width: 100%; border-left: none; border-top: 1px solid var(--border); }
-  .sk-main { overflow-y: visible; }
+  /* Detail panel: bottom sheet on mobile */
+  .sk-detail {
+    width: 100%;
+    right: 0; bottom: 0; top: auto;
+    height: auto; max-height: 82vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 40px rgba(0,0,0,0.6);
+  }
   .sk-compare-grid { flex-direction: column; }
-  .sk-compare-picker { gap: 8px; flex-direction: column; }
+  .sk-undo-toast { bottom: 16px; max-width: calc(100vw - 32px); }
 }
 
 /* ── SYNC ──────────────────────────────────────────────── */
