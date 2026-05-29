@@ -1732,6 +1732,23 @@ body {
 }
 .sk-form-drop-icon { font-size: 22px; line-height: 1; }
 
+/* File-type badge (AI / PDF / SVG) on card and form preview */
+.sk-file-badge {
+  font-size: 8px; font-weight: 800; letter-spacing: 0.1em;
+  padding: 2px 5px; border-radius: 4px;
+  text-transform: uppercase; flex-shrink: 0;
+}
+.sk-file-badge-ai  { background: rgba(255,121,0,0.18);  color: #ff7900; }
+.sk-file-badge-pdf { background: rgba(255,59,48,0.15);  color: #ff453a; }
+.sk-file-badge-svg { background: rgba(94,158,202,0.18); color: #5e9eca; }
+
+/* Overlay badge inside the form preview */
+.sk-form-preview { position: relative; }
+.sk-form-preview .sk-file-badge {
+  position: absolute; top: 8px; right: 8px;
+  font-size: 9px; padding: 3px 7px;
+}
+
 .sk-form-body {
   padding: 18px 20px;
   display: flex; flex-direction: column; gap: 16px;

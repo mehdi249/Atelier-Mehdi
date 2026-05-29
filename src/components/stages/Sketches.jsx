@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { generateId, compressImage } from '../../utils'
+import { renderFilePreview, getFileCategory, getFileBadgeLabel } from '../../filePreview'
 
 const STAGES = [
   { key: 'rough',     label: 'Rough',      color: '#636366' },
@@ -16,12 +17,15 @@ const STAGE_TABS = [
 const PRESET_TAGS = ['Top Pick', 'Needs Work', 'Selected']
 const NEXT_STAGE = { rough: 'iteration', iteration: 'final', final: 'final' }
 
+// Accept images + AI + PDF + SVG
+const DESIGN_FILE_ACCEPT = 'image/*,.ai,.pdf,.svg,application/pdf,image/svg+xml'
+
 const ADD_OPTIONS = [
-  { key: 'photo',     label: 'Import from Photos',  accept: 'image/*',  capture: undefined },
-  { key: 'camera',    label: 'Take Photo',           accept: 'image/*',  capture: 'environment' },
-  { key: 'blank',     label: 'Create Blank Sketch',  accept: null,       capture: undefined },
-  { key: 'file',      label: 'Import PDF / File',    accept: 'image/*',  capture: undefined },
-  { key: 'duplicate', label: 'Duplicate Last Sketch', accept: null,      capture: undefined },
+  { key: 'photo',     label: 'Import from Photos',     accept: DESIGN_FILE_ACCEPT, capture: undefined },
+  { key: 'camera',    label: 'Take Photo',              accept: 'image/*',          capture: 'environment' },
+  { key: 'blank',     label: 'Create Blank Sketch',     accept: null,               capture: undefined },
+  { key: 'file',      label: 'Import AI / PDF / SVG',   accept: DESIGN_FILE_ACCEPT, capture: undefined },
+  { key: 'duplicate', label: 'Duplicate Last Sketch',   accept: null,               capture: undefined },
 ]
 
 function stageFor(key) { return STAGES.find(s => s.key === key) ?? STAGES[0] }
@@ -85,14 +89,31 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
     if (needsFile) fileRef.current?.click()
   }, [])
 
+  const [rendering, setRendering] = useState(false)
+  const [fileBadge, setFileBadge] = useState(prefill?.fileCategory ?? null)
+
   async function handleFiles(files) {
     for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) continue
+      const cat = getFileCategory(file)
+      if (cat === 'unknown') continue
+      setRendering(true)
       try {
-        const compressed = await compressImage(file)
-        setSrc(compressed)
+        if (cat === 'image') {
+          const compressed = await compressImage(file)
+          setSrc(compressed)
+          setFileBadge('image')
+        } else {
+          const result = await renderFilePreview(file)
+          if (result?.dataUrl) {
+            setSrc(result.dataUrl)
+            setFileBadge(result.fileCategory)
+          }
+        }
         break
-      } catch (_) {}
+      } catch (_) {
+      } finally {
+        setRendering(false)
+      }
     }
   }
 
@@ -107,15 +128,22 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
         {option.accept != null && (
           <div
             className="sk-form-preview"
-            onClick={() => { if (!src) fileRef.current?.click() }}
-            style={{ cursor: src ? 'default' : 'pointer' }}
+            onClick={() => { if (!src && !rendering) fileRef.current?.click() }}
+            style={{ cursor: (src || rendering) ? 'default' : 'pointer' }}
           >
-            {src
-              ? <img src={src} alt="Preview" />
-              : <div className="sk-form-drop">
-                  <span className="sk-form-drop-icon">↑</span>
-                  <span>Tap to select image</span>
-                </div>
+            {rendering
+              ? <div className="sk-form-drop"><span>Rendering preview…</span></div>
+              : src
+                ? <>
+                    <img src={src} alt="Preview" />
+                    {fileBadge && fileBadge !== 'image' && (
+                      <span className={`sk-file-badge sk-file-badge-${fileBadge}`}>{getFileBadgeLabel(fileBadge)}</span>
+                    )}
+                  </>
+                : <div className="sk-form-drop">
+                    <span className="sk-form-drop-icon">↑</span>
+                    <span>Tap to select — image, AI, PDF or SVG</span>
+                  </div>
             }
             <input
               ref={fileRef}
@@ -176,8 +204,8 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
           <button
             className="btn-primary"
-            onClick={() => onSubmit({ name: name.trim() || 'Sketch', stage, note, src })}
-            disabled={needsFile && !src}
+            onClick={() => onSubmit({ name: name.trim() || 'Sketch', stage, note, src, fileCategory: fileBadge })}
+            disabled={(needsFile && !src) || rendering}
           >Create Sketch</button>
         </div>
       </div>
@@ -203,6 +231,9 @@ function SketchCard({ card, versionCount, latestStage, isSelected, onClick }) {
       <div className="sk-card-footer">
         <div className="sk-card-meta">
           <span className="sk-stage-pill" style={{ color: stage.color }}>{stage.label}</span>
+          {card.fileCategory && card.fileCategory !== 'image' && (
+            <span className={`sk-file-badge sk-file-badge-${card.fileCategory}`}>{getFileBadgeLabel(card.fileCategory)}</span>
+          )}
           <span className="sk-version">v{card.version}</span>
         </div>
         {card.name ? <p className="sk-card-name">{card.name}</p> : null}
@@ -550,7 +581,7 @@ export default function Sketches({ data, onChange }) {
     }
   }
 
-  function handleFormSubmit({ name, stage, note, src }) {
+  function handleFormSubmit({ name, stage, note, src, fileCategory }) {
     const { prefill } = formState
     const newCard = {
       id: generateId(),
@@ -561,6 +592,7 @@ export default function Sketches({ data, onChange }) {
       tags: [],
       parentId: prefill?.parentId ?? null,
       version: prefill?.version ?? 1,
+      fileCategory: fileCategory ?? prefill?.fileCategory ?? 'image',
       createdAt: Date.now(),
     }
     const newCards = [...cards, newCard]
