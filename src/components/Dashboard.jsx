@@ -3,7 +3,6 @@ import CollectionCard from './CollectionCard'
 import SyncModal from './SyncModal'
 import { createEmptyCollection } from '../data/baran'
 import { exportCollectionJSON } from '../utils'
-import { hasPinSet } from '../security'
 
 export default function Dashboard({
   collections,
@@ -15,8 +14,6 @@ export default function Dashboard({
   onConnectGist,
   onPullFromGist,
   onDisconnectGist,
-  onLock,
-  onOpenSecurity,
 }) {
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName] = useState('')
@@ -37,31 +34,17 @@ export default function Dashboard({
     setShowAdd(false)
   }
 
-  function renderSyncChip() {
-    if (!syncConfig) {
-      return (
-        <button className="sync-chip sync-idle" onClick={() => setShowSync(true)}>
-          ☁ Set up sync
-        </button>
-      )
-    }
-    if (syncStatus === 'syncing') {
-      return <span className="sync-chip sync-syncing">⟳ Syncing…</span>
-    }
-    if (syncStatus === 'error') {
-      return (
-        <button className="sync-chip sync-error" onClick={() => setShowSync(true)}>
-          ⚠ Sync error
-        </button>
-      )
-    }
-    // synced (or idle with config)
-    return (
-      <span className="sync-chip sync-synced" onClick={() => setShowSync(true)} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setShowSync(true)}>
-        ✓ Synced
-      </span>
-    )
-  }
+  const syncLabel =
+    !syncConfig      ? 'Set up sync' :
+    syncStatus === 'syncing' ? 'Syncing…' :
+    syncStatus === 'error'   ? 'Sync error' :
+    'Synced'
+
+  const cloudClass =
+    syncStatus === 'synced'  && syncConfig ? 'sync-cloud synced' :
+    syncStatus === 'syncing' && syncConfig ? 'sync-cloud syncing' :
+    syncStatus === 'error'   && syncConfig ? 'sync-cloud error' :
+    'sync-cloud'
 
   return (
     <div className="dashboard">
@@ -70,25 +53,16 @@ export default function Dashboard({
           <h1 className="logo">ATELIER</h1>
           <p className="logo-sub">by Mehdi</p>
         </div>
-        {renderSyncChip()}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {hasPinSet() && (
-            <button
-              className="btn-icon"
-              title="Lock app"
-              onClick={onLock}
-              style={{ fontSize: 17 }}
-            >
-              🔒
-            </button>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
-            className="btn-icon"
-            title="Security settings"
-            onClick={onOpenSecurity}
-            style={{ fontSize: 17 }}
+            className={cloudClass}
+            onClick={() => setShowSync(true)}
+            title={syncLabel}
+            aria-label={syncLabel}
           >
-            ⚙
+            <svg width="22" height="18" viewBox="0 0 24 20" fill="currentColor">
+              <path d="M19.35 7.04A7.49 7.49 0 0 0 12 1C9.11 1 6.6 2.64 5.35 5.04A5.994 5.994 0 0 0 0 11c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+            </svg>
           </button>
           <button className="btn-primary" onClick={() => setShowAdd(true)}>+ New Collection</button>
         </div>

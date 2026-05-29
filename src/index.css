@@ -1887,23 +1887,18 @@ body {
 }
 
 /* ── SYNC ──────────────────────────────────────────────── */
-.sync-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 11px; font-family: var(--font);
-  padding: 5px 11px; border-radius: 20px;
-  border: 1px solid var(--border-light);
-  background: var(--surface-2); color: var(--text-muted);
-  cursor: pointer; transition: background 0.15s, color 0.15s;
-  font-weight: 500; letter-spacing: 0.02em;
-  white-space: nowrap;
+.sync-cloud {
+  background: none; border: none; cursor: pointer;
+  padding: 6px 7px; border-radius: var(--radius-sm);
+  display: flex; align-items: center;
+  color: var(--text-dim);
+  transition: color 0.2s, background 0.15s;
 }
-.sync-chip:hover { background: var(--surface-3); color: var(--text); }
-.sync-idle   { }
-.sync-syncing { color: var(--text-muted); cursor: default; }
-.sync-synced  { color: #63b67a; border-color: rgba(99,182,122,0.3); cursor: pointer; }
-.sync-synced:hover { background: rgba(99,182,122,0.08); }
-.sync-error   { color: var(--danger); border-color: rgba(255,69,58,0.3); }
-.sync-error:hover { background: var(--danger-dim); }
+.sync-cloud:hover { background: var(--surface-2); color: var(--text-muted); }
+.sync-cloud.synced  { color: #63b67a; }
+.sync-cloud.synced:hover { background: rgba(99,182,122,0.1); color: #63b67a; }
+.sync-cloud.syncing { color: var(--text-dim); }
+.sync-cloud.error   { color: var(--danger); }
 
 /* Sync modal (reuses .modal-overlay / .modal) */
 .sync-gist-id {
