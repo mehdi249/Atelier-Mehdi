@@ -17,6 +17,7 @@ function createPiece(index = 0) {
     fit: '',
     styleCode: `SC-${String(index + 1).padStart(3, '0')}`,
     description: '',
+    sketch: null,
     sketchFront: null,
     sketchBack: null,
     fabricLayers: { shell: emptyLayer(), lining: null, insulation: null },
@@ -27,19 +28,23 @@ function createPiece(index = 0) {
   }
 }
 
-// ── SKETCH SLOT ───────────────────────────────────────────────
+// ── TECH PACK SKETCH PANEL ────────────────────────────────────
+// Single upload zone that renders all pages and shows a carousel.
 
-function SketchSlot({ label, data, onChange }) {
-  const fileRef = useRef(null)
+function TechPackSketchPanel({ piece, onUpdate }) {
+  const fileRef  = useRef(null)
   const [rendering, setRendering] = useState(false)
-  const [pageIdx, setPageIdx] = useState(0)
+  const [pageIdx, setPageIdx]     = useState(0)
   const swipeXRef = useRef(0)
 
-  useEffect(() => { setPageIdx(0) }, [data?.src])
-
-  const pages    = data?.pages
+  const sketch   = piece.sketch
+  const pages    = sketch?.pages
   const hasPages = Array.isArray(pages) && pages.length > 1
-  const displaySrc = hasPages ? pages[pageIdx] : data?.src
+  const showDots = hasPages && pages.length <= 10
+  const displaySrc  = hasPages ? pages[pageIdx] : sketch?.src
+  const isCoverPage = (sketch?.coverPageIdx ?? 0) === pageIdx
+
+  useEffect(() => { setPageIdx(0) }, [sketch?.src])
 
   async function handleFile(file) {
     const cat = getFileCategory(file)
@@ -48,17 +53,22 @@ function SketchSlot({ label, data, onChange }) {
     try {
       if (cat === 'image') {
         const compressed = await compressImage(file)
-        onChange({ src: compressed, fileCategory: 'image', pages: null, pageCount: 1 })
+        onUpdate({ ...piece, sketch: { src: compressed, pages: [compressed], pageCount: 1, fileCategory: 'image', coverPageIdx: 0 } })
       } else {
         const result = await renderFilePreview(file, 1)
         if (!result?.dataUrl) return
-        const isSinglePage = (result.pageCount ?? 1) <= 1
-        const allPages = isSinglePage ? null : await renderAllPages(file)
-        onChange({
-          src: result.dataUrl,
-          fileCategory: result.fileCategory,
-          pages: allPages?.length > 1 ? allPages : null,
-          pageCount: result.pageCount ?? 1,
+        const isSingle   = (result.pageCount ?? 1) <= 1
+        const rawPages   = isSingle ? null : await renderAllPages(file)
+        const safePages  = rawPages?.length > 0 ? rawPages : [result.dataUrl]
+        onUpdate({
+          ...piece,
+          sketch: {
+            src: result.dataUrl,
+            pages: safePages,
+            pageCount: result.pageCount ?? 1,
+            fileCategory: result.fileCategory,
+            coverPageIdx: 0,
+          },
         })
       }
     } catch (_) {
@@ -67,18 +77,25 @@ function SketchSlot({ label, data, onChange }) {
     }
   }
 
+  function setCover() {
+    if (!hasPages || isCoverPage) return
+    onUpdate({ ...piece, sketch: { ...sketch, src: pages[pageIdx], coverPageIdx: pageIdx } })
+  }
+
+  // ── Loading ──
   if (rendering) {
     return (
-      <div className="tp-sketch-zone tp-sketch-zone-rendering">
-        <span className="tp-sketch-label">{label}</span>
-        <span className="tp-sketch-hint">Rendering…</span>
+      <div className="tp-sketch-panel tp-sketch-panel-loading">
+        <div className="tp-sketch-panel-spin">⟳</div>
+        <span className="tp-sketch-panel-loading-text">Rendering pages…</span>
       </div>
     )
   }
 
-  if (!data) {
+  // ── Empty ──
+  if (!sketch) {
     return (
-      <div className="tp-sketch-zone" onClick={() => fileRef.current.click()}>
+      <div className="tp-sketch-panel tp-sketch-panel-empty" onClick={() => fileRef.current.click()}>
         <input
           ref={fileRef}
           type="file"
@@ -86,16 +103,17 @@ function SketchSlot({ label, data, onChange }) {
           style={{ display: 'none' }}
           onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); e.target.value = '' }}
         />
-        <span className="tp-sketch-label">{label}</span>
-        <span className="tp-sketch-hint">↑ Upload</span>
-        <span className="tp-sketch-hint-sub">AI · PDF · SVG · Image</span>
+        <span className="tp-sketch-panel-up-icon">↑</span>
+        <span className="tp-sketch-panel-up-label">Upload Tech Pack</span>
+        <span className="tp-sketch-panel-up-hint">AI · PDF · SVG · Image</span>
       </div>
     )
   }
 
+  // ── Carousel ──
   return (
     <div
-      className="tp-sketch-zone tp-sketch-zone-filled"
+      className="tp-sketch-panel tp-sketch-panel-filled"
       onTouchStart={e => { swipeXRef.current = e.touches[0].clientX }}
       onTouchEnd={e => {
         if (!hasPages) return
@@ -104,16 +122,53 @@ function SketchSlot({ label, data, onChange }) {
         if (dx < -40) setPageIdx(p => Math.min(pages.length - 1, p + 1))
       }}
     >
-      <span className="tp-sketch-label">{label}</span>
-      <img src={displaySrc} alt={label} className="tp-sketch-img" draggable={false} />
+      {/* Page counter */}
       {hasPages && (
-        <div className="tp-sketch-nav">
-          <button className="tp-sketch-nav-btn" onClick={e => { e.stopPropagation(); setPageIdx(p => Math.max(0, p - 1)) }} disabled={pageIdx <= 0}>‹</button>
-          <span className="tp-sketch-nav-count">{pageIdx + 1}/{pages.length}</span>
-          <button className="tp-sketch-nav-btn" onClick={e => { e.stopPropagation(); setPageIdx(p => Math.min(pages.length - 1, p + 1)) }} disabled={pageIdx >= pages.length - 1}>›</button>
+        <div className="tp-sketch-panel-counter">Page {pageIdx + 1} of {pages.length}</div>
+      )}
+
+      <img src={displaySrc} alt={`Page ${pageIdx + 1}`} className="tp-sketch-panel-img" draggable={false} />
+
+      {/* Left / right arrows */}
+      {hasPages && pageIdx > 0 && (
+        <button className="tp-sketch-panel-arrow tp-sketch-panel-prev" onClick={() => setPageIdx(p => p - 1)}>‹</button>
+      )}
+      {hasPages && pageIdx < pages.length - 1 && (
+        <button className="tp-sketch-panel-arrow tp-sketch-panel-next" onClick={() => setPageIdx(p => p + 1)}>›</button>
+      )}
+
+      {/* Dots (≤10 pages) */}
+      {showDots && (
+        <div className="tp-sketch-panel-dots">
+          {pages.map((_, i) => (
+            <button
+              key={i}
+              className={`tp-sketch-panel-dot${i === pageIdx ? ' active' : ''}`}
+              onClick={() => setPageIdx(i)}
+              aria-label={`Page ${i + 1}`}
+            />
+          ))}
         </div>
       )}
-      <button className="tp-sketch-clear" onClick={e => { e.stopPropagation(); onChange(null) }} title="Remove">×</button>
+
+      {/* Actions bar */}
+      <div className="tp-sketch-panel-actions">
+        {hasPages && (
+          <button
+            className={`tp-sketch-panel-cover-btn${isCoverPage ? ' is-cover' : ''}`}
+            onClick={setCover}
+            disabled={isCoverPage}
+          >
+            {isCoverPage ? '★ Cover' : 'Set as Cover'}
+          </button>
+        )}
+        <button
+          className="tp-sketch-panel-remove-btn"
+          onClick={() => onUpdate({ ...piece, sketch: null })}
+        >
+          Remove
+        </button>
+      </div>
     </div>
   )
 }
@@ -215,15 +270,18 @@ function Colorways({ colorways, onChange }) {
 // ── PIECE GRID CARD ───────────────────────────────────────────
 
 function PieceCard({ piece, isSelected, onClick }) {
-  const hasSrc = !!piece.sketchFront?.src
+  // Support both new `sketch` field and legacy `sketchFront` for backward compat
+  const coverSrc  = piece.sketch?.src ?? piece.sketchFront?.src
+  const pageCount = piece.sketch?.pages?.length ?? 0
+
   return (
     <div
       className={`tp-piece-card${isSelected ? ' selected' : ''}${piece.complete ? ' complete' : ''}`}
       onClick={onClick}
     >
       <div className="tp-piece-cover">
-        {hasSrc
-          ? <img src={piece.sketchFront.src} alt={piece.name} />
+        {coverSrc
+          ? <img src={coverSrc} alt={piece.name} />
           : (
             <div className="tp-piece-cover-empty">
               <span className="tp-piece-cover-plus">+</span>
@@ -232,6 +290,7 @@ function PieceCard({ piece, isSelected, onClick }) {
           )
         }
         <div className={`tp-piece-dot${piece.complete ? ' complete' : ''}`} />
+        {pageCount > 1 && <span className="tp-piece-pages">{pageCount} pages</span>}
       </div>
       <div className="tp-piece-footer">
         <span className="tp-piece-name">{piece.name}</span>
@@ -266,11 +325,8 @@ function PieceDetailPanel({ piece, pieceNum, onUpdate, onDelete, onClose }) {
         <button className="btn-icon" onClick={onClose} title="Close">✕</button>
       </div>
 
-      {/* Front + Back flat sketches */}
-      <div className="tp-detail-sketches">
-        <SketchSlot label="FRONT" data={piece.sketchFront ?? null} onChange={val => onUpdate({ ...piece, sketchFront: val })} />
-        <SketchSlot label="BACK"  data={piece.sketchBack  ?? null} onChange={val => onUpdate({ ...piece, sketchBack:  val })} />
-      </div>
+      {/* Unified multi-page sketch carousel */}
+      <TechPackSketchPanel piece={piece} onUpdate={onUpdate} />
 
       {/* Metadata fields */}
       <div className="tp-detail-fields">
@@ -292,7 +348,6 @@ function PieceDetailPanel({ piece, pieceNum, onUpdate, onDelete, onClose }) {
         </div>
       </div>
 
-      {/* Auto-assembled classification string */}
       {classStr && <div className="tp-class-string-row">{classStr}</div>}
 
       {/* Fabric layers */}
@@ -340,7 +395,7 @@ function PieceDetailPanel({ piece, pieceNum, onUpdate, onDelete, onClose }) {
 
 export default function StyleCards({ data, onChange }) {
   const [selectedId, setSelectedId] = useState(null)
-  const pieces     = data.pieces ?? []
+  const pieces      = data.pieces ?? []
   const allComplete = pieces.length > 0 && pieces.every(p => p.complete)
 
   function addPiece() {
@@ -363,7 +418,6 @@ export default function StyleCards({ data, onChange }) {
 
   return (
     <div className="tp-workspace">
-      {/* Toolbar */}
       <div className="tp-toolbar">
         <div className="tp-toolbar-left">
           <h3 className="tp-title">Style Cards</h3>
@@ -374,7 +428,6 @@ export default function StyleCards({ data, onChange }) {
         </button>
       </div>
 
-      {/* Grid body */}
       <div className="tp-body">
         {pieces.length === 0 ? (
           <div className="sk-empty" style={{ maxWidth: 400, margin: '60px auto' }}>
@@ -396,7 +449,6 @@ export default function StyleCards({ data, onChange }) {
         )}
       </div>
 
-      {/* Detail panel — same overlay pattern as Sketches */}
       {selectedPiece && (
         <>
           <div className="tp-detail-backdrop" onClick={() => setSelectedId(null)} />

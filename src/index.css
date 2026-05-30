@@ -2593,6 +2593,20 @@ body {
   box-shadow: 0 0 8px rgba(201,169,110,0.45);
 }
 
+/* Page count badge on grid card */
+.tp-piece-pages {
+  position: absolute;
+  bottom: 8px; left: 8px;
+  font-size: 8px; font-weight: 600;
+  color: rgba(255,255,255,0.82);
+  background: rgba(0,0,0,0.5);
+  border-radius: 8px;
+  padding: 2px 6px;
+  letter-spacing: 0.04em;
+  z-index: 2;
+  white-space: nowrap;
+}
+
 /* Card footer */
 .tp-piece-footer {
   padding: 8px 10px 9px;
@@ -2681,16 +2695,6 @@ body {
 .tp-detail-name-input::placeholder { color: var(--text-dim); }
 
 /* Sketch pair in panel */
-.tp-detail-sketches {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 12px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  background: var(--surface-2);
-}
-
 /* Fields row */
 .tp-detail-fields {
   display: grid;
@@ -2771,91 +2775,141 @@ body {
   margin-top: auto;
 }
 
-/* Sketch upload zones (used inside tp-detail-sketches) */
-.tp-sketch-zone {
+/* ── Unified multi-page sketch panel ── */
+.tp-sketch-panel {
+  position: relative;
   background: var(--surface-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+}
+
+/* Empty / upload state */
+.tp-sketch-panel-empty {
   cursor: pointer;
-  min-height: 140px;
-  padding: 10px;
-  transition: border-color 0.15s, background 0.15s;
-  position: relative;
-  overflow: hidden;
+  gap: 8px;
+  padding: 36px 20px;
   text-align: center;
-  gap: 4px;
-}
-.tp-sketch-zone:not(.tp-sketch-zone-filled):hover { border-color: var(--accent); background: var(--surface-2); }
-.tp-sketch-zone-rendering { pointer-events: none; }
-
-.tp-sketch-label {
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-.tp-sketch-zone-filled .tp-sketch-label {
-  position: absolute;
-  top: 6px; left: 8px;
-  color: rgba(255,255,255,0.7);
-  background: rgba(0,0,0,0.45);
-  border-radius: 3px;
-  padding: 2px 5px;
-  z-index: 2;
-}
-
-.tp-sketch-hint { font-size: 10px; color: var(--text-muted); }
-.tp-sketch-hint-sub { font-size: 9px; color: var(--text-dim); letter-spacing: 0.06em; }
-
-.tp-sketch-img {
+  transition: background 0.15s;
   width: 100%;
-  max-height: 220px;
+}
+.tp-sketch-panel-empty:hover { background: var(--surface-2); }
+.tp-sketch-panel-up-icon  { font-size: 26px; color: var(--text-dim); line-height: 1; }
+.tp-sketch-panel-up-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.tp-sketch-panel-up-hint  { font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; }
+
+/* Loading state */
+.tp-sketch-panel-loading {
+  gap: 10px;
+  padding: 48px 20px;
+  text-align: center;
+  width: 100%;
+}
+.tp-sketch-panel-spin {
+  font-size: 22px;
+  color: var(--accent);
+  animation: tp-spin 1s linear infinite;
+  display: inline-block;
+}
+@keyframes tp-spin { to { transform: rotate(360deg); } }
+.tp-sketch-panel-loading-text { font-size: 12px; color: var(--text-muted); letter-spacing: 0.04em; }
+
+/* Filled / carousel state */
+.tp-sketch-panel-filled { overflow: hidden; }
+.tp-sketch-panel-img {
+  width: 100%;
+  max-height: 340px;
   object-fit: contain;
   display: block;
-  border-radius: 3px;
 }
 
-.tp-sketch-nav {
+/* Page counter */
+.tp-sketch-panel-counter {
+  position: absolute;
+  top: 10px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px; font-weight: 600;
+  color: rgba(255,255,255,0.82);
+  background: rgba(0,0,0,0.5);
+  border-radius: 10px;
+  padding: 3px 10px;
+  letter-spacing: 0.08em;
+  z-index: 3; white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Left / right arrows */
+.tp-sketch-panel-arrow {
+  position: absolute;
+  top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.52);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: white; font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 3; line-height: 1;
+  transition: background 0.12s;
+}
+.tp-sketch-panel-arrow:hover { background: rgba(0,0,0,0.78); }
+.tp-sketch-panel-prev { left: 10px; }
+.tp-sketch-panel-next { right: 10px; }
+
+/* Dot indicators */
+.tp-sketch-panel-dots {
+  position: absolute;
+  bottom: 42px; left: 0; right: 0;
+  display: flex; justify-content: center;
+  gap: 5px; z-index: 3;
+}
+.tp-sketch-panel-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,0.32);
+  border: none; cursor: pointer; padding: 0;
+  transition: background 0.15s, transform 0.15s;
+}
+.tp-sketch-panel-dot.active { background: white; transform: scale(1.35); }
+
+/* Actions bar */
+.tp-sketch-panel-actions {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  display: flex;
-  align-items: center;
+  display: flex; align-items: center;
   justify-content: space-between;
-  background: linear-gradient(transparent, rgba(0,0,0,0.65));
-  padding: 12px 6px 5px;
-  z-index: 2;
+  background: linear-gradient(transparent, rgba(0,0,0,0.72));
+  padding: 18px 12px 8px;
+  z-index: 3; gap: 8px;
 }
-.tp-sketch-nav-btn {
-  background: rgba(255,255,255,0.14);
-  border: none; color: white;
-  font-size: 14px; border-radius: 4px;
-  padding: 2px 7px; cursor: pointer;
-  transition: background 0.12s;
-}
-.tp-sketch-nav-btn:hover:not(:disabled) { background: rgba(255,255,255,0.28); }
-.tp-sketch-nav-btn:disabled { opacity: 0.3; cursor: default; }
-.tp-sketch-nav-count { font-size: 9px; color: rgba(255,255,255,0.7); font-weight: 600; }
-
-.tp-sketch-clear {
-  position: absolute;
-  top: 5px; right: 5px;
-  width: 20px; height: 20px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.5);
-  border: none;
+.tp-sketch-panel-cover-btn {
+  font-family: var(--font);
+  font-size: 10px; font-weight: 600;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.22);
   color: rgba(255,255,255,0.85);
-  font-size: 13px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; line-height: 1;
-  transition: background 0.12s;
-  z-index: 3;
+  border-radius: 10px; padding: 4px 10px;
+  cursor: pointer; letter-spacing: 0.04em;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.tp-sketch-clear:hover { background: var(--danger); }
+.tp-sketch-panel-cover-btn:hover:not(:disabled) { background: rgba(255,255,255,0.22); }
+.tp-sketch-panel-cover-btn.is-cover {
+  background: rgba(201,169,110,0.18);
+  border-color: rgba(201,169,110,0.6);
+  color: var(--accent); cursor: default;
+}
+.tp-sketch-panel-remove-btn {
+  font-family: var(--font);
+  font-size: 10px; font-weight: 500;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.18);
+  color: rgba(255,255,255,0.55);
+  border-radius: 10px; padding: 4px 10px;
+  cursor: pointer; margin-left: auto;
+  transition: border-color 0.12s, color 0.12s;
+}
+.tp-sketch-panel-remove-btn:hover { border-color: var(--danger); color: var(--danger); }
 
 /* Fabric layer with swatch */
 .tp-fabric-row {
@@ -2965,7 +3019,6 @@ body {
     border-top: 1px solid var(--border);
     box-shadow: 0 -8px 40px rgba(0,0,0,0.55);
   }
-  .tp-detail-sketches { gap: 6px; padding: 10px; }
 }
 
 
