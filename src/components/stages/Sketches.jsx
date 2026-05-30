@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { generateId, compressImage } from '../../utils'
+import { generateId, compressImage, fileToDataUrl, downloadFile } from '../../utils'
 import { renderFilePreview, renderAllPages, getFileCategory, getFileBadgeLabel } from '../../filePreview'
 
 const STAGES = [
@@ -95,6 +95,8 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
   const [pageCount, setPageCount]     = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
   const [allPages, setAllPages]       = useState(null) // array of data URLs — populated in background
+  const [originalData, setOriginalData] = useState(null)
+  const [originalName, setOriginalName] = useState(null)
 
   async function handleFiles(files) {
     for (const file of Array.from(files)) {
@@ -102,6 +104,13 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
       if (cat === 'unknown') continue
       setRendering(true)
       setAllPages(null)
+      // Store original for download (skip if > 8 MB)
+      setOriginalName(file.name)
+      if (file.size <= 8 * 1024 * 1024) {
+        fileToDataUrl(file).then(setOriginalData).catch(() => {})
+      } else {
+        setOriginalData(null)
+      }
       try {
         if (cat === 'image') {
           const compressed = await compressImage(file)
@@ -252,7 +261,7 @@ function AddSketchForm({ option, prefill, onSubmit, onClose }) {
           <button className="btn-ghost" onClick={onClose}>Cancel</button>
           <button
             className="btn-primary"
-            onClick={() => onSubmit({ name: name.trim() || 'Sketch', stage, note, src, fileCategory: fileBadge, pages: allPages?.length > 1 ? allPages : null })}
+            onClick={() => onSubmit({ name: name.trim() || 'Sketch', stage, note, src, fileCategory: fileBadge, pages: allPages?.length > 1 ? allPages : null, originalData, originalName })}
             disabled={(needsFile && !src) || rendering}
           >Create Sketch</button>
         </div>
@@ -494,6 +503,16 @@ function DetailPanel({ family, activeId, onSetActiveId, onAction, onUpdateCard, 
         {prevCard && (
           <button className="btn-ghost-sm" onClick={() => onAction('compare', activeCard, prevCard)} title="Compare with previous version">Compare</button>
         )}
+        {(activeCard.originalData ?? activeCard.src) && (
+          <button
+            className="btn-ghost-sm"
+            title="Download original file"
+            onClick={() => downloadFile(
+              activeCard.originalData ?? activeCard.src,
+              activeCard.originalName ?? `${activeCard.name || 'sketch'}.jpg`
+            )}
+          >↓ Download</button>
+        )}
         <button
           className="btn-ghost-sm danger"
           style={{ marginLeft: 'auto' }}
@@ -732,7 +751,7 @@ export default function Sketches({ data, onChange }) {
     }
   }
 
-  function handleFormSubmit({ name, stage, note, src, fileCategory, pages }) {
+  function handleFormSubmit({ name, stage, note, src, fileCategory, pages, originalData, originalName }) {
     const { prefill } = formState
     const newCard = {
       id: generateId(),
@@ -745,6 +764,8 @@ export default function Sketches({ data, onChange }) {
       version: prefill?.version ?? 1,
       fileCategory: fileCategory ?? prefill?.fileCategory ?? 'image',
       pages: pages ?? undefined,
+      originalData: originalData ?? null,
+      originalName: originalName ?? null,
       createdAt: Date.now(),
     }
     const newCards = [...cards, newCard]

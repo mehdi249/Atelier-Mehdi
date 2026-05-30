@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { generateId, compressImage } from '../../utils'
+import { generateId, compressImage, downloadFile } from '../../utils'
 import { renderAllPages, getFileCategory } from '../../filePreview'
 import { dxfToSvg } from '../../dxfRenderer'
 
@@ -181,6 +181,8 @@ function createVersion(num) {
     pageCount: 0,
     fileCategory: null,
     nativeName: null,
+    originalData: null,
+    originalName: null,
     note: '',
     createdAt: Date.now(),
   }
@@ -202,6 +204,13 @@ function createPiece(name = 'Pattern Piece') {
 // ── FILE PROCESSING ──────────────────────────────────────────────────────────
 
 async function processFile(file, versionNum) {
+  // Store original file for later download (skip if > 8 MB to protect localStorage)
+  let originalData = null
+  if (file.size <= 8 * 1024 * 1024) {
+    try { originalData = await blobToDataUrl(file) } catch (_) {}
+  }
+  const originalName = file.name
+
   const ext = file.name.split('.').pop().toLowerCase()
 
   if (ext === 'zprj') {
@@ -213,6 +222,8 @@ async function processFile(file, versionNum) {
       src: previewSrc,
       pages: previewSrc ? [previewSrc] : [],
       pageCount: previewSrc ? 1 : 0,
+      originalData,
+      originalName,
     }
   }
 
@@ -225,6 +236,8 @@ async function processFile(file, versionNum) {
       src: previewSrc,
       pages: previewSrc ? [previewSrc] : [],
       pageCount: previewSrc ? 1 : 0,
+      originalData,
+      originalName,
     }
   }
 
@@ -237,13 +250,15 @@ async function processFile(file, versionNum) {
       src,
       pages: src ? [src] : [],
       pageCount: src ? 1 : 0,
+      originalData,
+      originalName,
     }
   }
 
   const cat = getFileCategory(file)
   if (cat === 'image') {
     const src = await compressImage(file)
-    return { ...createVersion(versionNum), fileCategory: 'image', src, pages: [src], pageCount: 1 }
+    return { ...createVersion(versionNum), fileCategory: 'image', src, pages: [src], pageCount: 1, originalData, originalName }
   }
 
   const pages = await renderAllPages(file, 1200)
@@ -253,6 +268,8 @@ async function processFile(file, versionNum) {
     src: pages[0] ?? null,
     pages,
     pageCount: pages.length,
+    originalData,
+    originalName,
   }
 }
 
@@ -559,20 +576,31 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onActiveVersion,
           {activeVer?.nativeName && !activeVer?.src ? (
             <>
               <NativeBadge filename={activeVer.nativeName} />
-              <input
-                ref={previewImgRef}
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                onChange={e => { addPreviewImage(e.target.files[0]); e.target.value = '' }}
-              />
-              <button
-                className="btn-ghost-sm"
-                style={{ marginTop: 12, fontSize: 11 }}
-                onClick={() => previewImgRef.current?.click()}
-              >
-                + Add preview image
-              </button>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <input
+                  ref={previewImgRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={e => { addPreviewImage(e.target.files[0]); e.target.value = '' }}
+                />
+                <button
+                  className="btn-ghost-sm"
+                  style={{ fontSize: 11 }}
+                  onClick={() => previewImgRef.current?.click()}
+                >
+                  + Add preview
+                </button>
+                {activeVer.originalData && (
+                  <button
+                    className="btn-ghost-sm"
+                    style={{ fontSize: 11 }}
+                    onClick={() => downloadFile(activeVer.originalData, activeVer.originalName ?? activeVer.nativeName)}
+                  >
+                    ↓ Download
+                  </button>
+                )}
+              </div>
             </>
           ) : activeVer?.src || pages.length ? (
             <>
@@ -607,6 +635,14 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onActiveVersion,
                 >
                   {isCover ? '✓ Cover' : 'Set as Cover'}
                 </button>
+                {activeVer?.originalData && (
+                  <button
+                    className="tp-sketch-panel-cover-btn"
+                    onClick={() => downloadFile(activeVer.originalData, activeVer.originalName ?? activeVer.nativeName ?? 'file')}
+                  >
+                    ↓ Download
+                  </button>
+                )}
                 {activeVer && (
                   <button className="tp-sketch-panel-remove-btn" onClick={() => removeVersion(activeVer.id)}>
                     Remove

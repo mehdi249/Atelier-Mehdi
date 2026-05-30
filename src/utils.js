@@ -2,6 +2,24 @@ export function generateId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
+export function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload  = () => resolve(r.result)
+    r.onerror = reject
+    r.readAsDataURL(file)
+  })
+}
+
+export function downloadFile(dataUrl, filename) {
+  const a = document.createElement('a')
+  a.href = dataUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 export function compressImage(file) {
   return new Promise((resolve) => {
     const canvas = document.createElement('canvas')
