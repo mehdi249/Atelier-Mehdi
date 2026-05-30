@@ -372,9 +372,25 @@ function PatternCard({ piece, pieceNum, activeVersionId, onSelectVersion, onClic
 // ── DETAIL PANEL ─────────────────────────────────────────────────────────────
 
 function PatternDetailPanel({ piece, pieceNum, activeVersionId, onUpdate, onDelete, onClose }) {
-  const [pageIdx,     setPageIdx]     = useState(0)
-  const [addLoading,  setAddLoading]  = useState(false)
-  const inputRef = useRef(null)
+  const [pageIdx,      setPageIdx]      = useState(0)
+  const [addLoading,   setAddLoading]   = useState(false)
+  const [addMenuOpen,  setAddMenuOpen]  = useState(false)
+  const [addAccept,    setAddAccept]    = useState('')
+  const inputRef   = useRef(null)
+  const addMenuRef = useRef(null)
+
+  useEffect(() => {
+    if (!addMenuOpen) return
+    function close(e) { if (addMenuRef.current && !addMenuRef.current.contains(e.target)) setAddMenuOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [addMenuOpen])
+
+  function pickVersionFiles(accept) {
+    setAddAccept(accept)
+    setAddMenuOpen(false)
+    setTimeout(() => inputRef.current?.click(), 30)
+  }
 
   const activeVer = piece.versions.find(v => v.id === activeVersionId) ?? piece.versions[0]
   const pages     = activeVer?.pages ?? []
@@ -590,18 +606,27 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onUpdate, onDele
               ))}
             </div>
             <input ref={inputRef} type="file" multiple
-              accept=".pdf,.ai,.svg,.dxf,.zprj,.pds,.opf,image/*"
+              accept={addAccept}
               style={{ display: 'none' }}
               onChange={e => { addVersion(e.target.files); e.target.value = '' }}
             />
-            <button
-              className="btn-ghost-sm"
-              style={{ marginTop: 8, width: '100%' }}
-              onClick={() => inputRef.current?.click()}
-              disabled={addLoading}
-            >
-              {addLoading ? 'Importing…' : '+ Add Version'}
-            </button>
+            <div className="pt-add-wrap" ref={addMenuRef} style={{ marginTop: 8 }}>
+              <button
+                className="btn-ghost-sm"
+                style={{ width: '100%' }}
+                onClick={() => setAddMenuOpen(o => !o)}
+                disabled={addLoading}
+              >
+                {addLoading ? 'Importing…' : '+ Add Version ▾'}
+              </button>
+              {addMenuOpen && (
+                <div className="pt-add-menu" style={{ bottom: 'calc(100% + 4px)', top: 'auto' }}>
+                  {ADD_OPTIONS.map(o => (
+                    <button key={o.key} onClick={() => pickVersionFiles(o.accept)}>{o.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
