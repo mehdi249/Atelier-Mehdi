@@ -2321,6 +2321,72 @@ body {
   letter-spacing: 0.06em;
 }
 
+/* ── ICLOUD FOLDER BUTTON ──────────────────────────────── */
+.folder-btn {
+  position: relative;
+  background: none; border: none; cursor: pointer;
+  padding: 6px 7px; border-radius: var(--radius-sm);
+  display: flex; align-items: center;
+  color: var(--text-dim);
+  transition: color 0.2s, background 0.15s;
+}
+.folder-btn:hover { background: var(--surface-2); color: var(--text-muted); }
+.folder-btn.folder-connected { color: #63b67a; }
+.folder-btn.folder-connected:hover { background: rgba(99,182,122,0.1); }
+.folder-btn.folder-error { color: var(--danger); }
+
+.folder-btn-badge {
+  position: absolute; top: 2px; right: 2px;
+  font-size: 8px; font-weight: 700; line-height: 1;
+  color: inherit;
+}
+
+.folder-menu {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  min-width: 260px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  padding: 14px;
+  z-index: 200;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.folder-menu-name {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.folder-menu-label {
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.folder-menu-value {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.folder-menu-status {
+  font-size: 11px; color: var(--text-muted);
+  padding: 6px 8px;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+}
+.folder-menu-desc {
+  font-size: 12px; color: var(--text-muted); line-height: 1.5;
+}
+.folder-menu-action {
+  background: var(--surface-3); border: 1px solid var(--border-light);
+  color: var(--text-muted); border-radius: var(--radius);
+  padding: 8px 12px; font-size: 12px; cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, color 0.15s;
+}
+.folder-menu-action:hover { background: var(--border-light); color: var(--text); }
+.folder-menu-action.primary {
+  background: var(--accent); border-color: var(--accent);
+  color: #000; font-weight: 600;
+}
+.folder-menu-action.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.folder-menu-action:disabled { opacity: 0.5; cursor: default; }
+
 /* ── SYNC ──────────────────────────────────────────────── */
 .sync-cloud {
   background: none; border: none; cursor: pointer;

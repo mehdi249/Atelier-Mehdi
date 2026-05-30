@@ -16,6 +16,10 @@ export default function App() {
     connectGist,
     pullFromGist,
     disconnectGist,
+    folderHandle,
+    folderStatus,
+    connectFolder,
+    disconnectFolder,
   } = useStore()
   const [currentView, setCurrentView] = useState('dashboard')
 
@@ -37,6 +41,10 @@ export default function App() {
           onConnectGist={connectGist}
           onPullFromGist={pullFromGist}
           onDisconnectGist={disconnectGist}
+          folderHandle={folderHandle}
+          folderStatus={folderStatus}
+          onConnectFolder={connectFolder}
+          onDisconnectFolder={disconnectFolder}
         />
       </PullToRefresh>
     )
