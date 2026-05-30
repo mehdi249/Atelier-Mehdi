@@ -2516,14 +2516,14 @@ body {
   min-height: 0;
 }
 
-/* Grid — single column, tall portrait cards */
+/* Grid — single column, landscape tech-pack cards */
 .tp-grid {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-/* Piece card — vertical, image-first */
+/* Card shell */
 .tp-piece-card {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -2532,26 +2532,134 @@ body {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+  min-height: 260px;
+  transition: box-shadow 0.15s, border-color 0.15s;
 }
-.tp-piece-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.55); transform: translateY(-2px); }
-.tp-piece-card.selected { box-shadow: 0 0 0 2px var(--accent), 0 4px 18px rgba(0,0,0,0.45); border-color: var(--accent); }
+.tp-piece-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.55); border-color: var(--border-light); }
+.tp-piece-card.selected { box-shadow: 0 0 0 2px var(--accent); border-color: var(--accent); }
 .tp-piece-card.complete { border-color: rgba(201,169,110,0.38); }
 
-/* Cover image — tall portrait ratio */
-.tp-piece-cover {
-  aspect-ratio: 3/4;
-  width: 100%;
+/* Header bar */
+.tp-piece-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
   background: var(--surface-3);
-  position: relative;
+  flex-shrink: 0;
+}
+.tp-piece-card-label {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tp-piece-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.tp-piece-card-class {
+  font-size: 9px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* Completion dot in header */
+.tp-piece-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border-light);
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.tp-piece-dot.complete {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 8px rgba(201,169,110,0.45);
+}
+
+/* Body — two columns */
+.tp-piece-card-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Left — fabric swatches */
+.tp-piece-card-left {
+  width: 28%;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   overflow: hidden;
 }
-.tp-piece-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tp-piece-card-left-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.tp-piece-card-swatch { display: flex; flex-direction: column; gap: 5px; }
+.tp-piece-card-swatch img {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  border-radius: 5px;
+  display: block;
+}
+.tp-piece-card-swatch-empty {
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: var(--surface-3);
+  border-radius: 5px;
+  border: 1px dashed var(--border-light);
+}
+.tp-piece-card-swatch-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
 
-/* Empty cover — dashed upload zone */
+/* Right — sketch preview */
+.tp-piece-card-right {
+  flex: 1;
+  position: relative;
+  background: var(--surface-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 220px;
+}
+.tp-piece-card-sketch {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Empty upload zone inside right panel */
 .tp-piece-cover-empty {
   position: absolute;
-  inset: 10px;
+  inset: 12px;
   border: 1.5px dashed var(--border-light);
   border-radius: var(--radius-sm);
   display: flex;
@@ -2564,40 +2672,20 @@ body {
 .tp-piece-card:hover .tp-piece-cover-empty { border-color: rgba(201,169,110,0.5); }
 
 .tp-piece-cover-plus {
-  font-size: 32px;
+  font-size: 30px;
   color: var(--text-dim);
   font-weight: 200;
   line-height: 1;
 }
 .tp-piece-card:hover .tp-piece-cover-plus { color: var(--text-muted); }
-
 .tp-piece-cover-hint {
   font-size: 9px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
 
-/* Completion dot — overlaid top-right of cover */
-.tp-piece-dot {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--surface-3);
-  border: 1.5px solid var(--border-light);
-  z-index: 2;
-  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
-}
-.tp-piece-dot.complete {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 0 8px rgba(201,169,110,0.45);
-}
-
-/* Page count badge — bottom-left of cover */
+/* Page count badge */
 .tp-piece-pages {
   position: absolute;
   bottom: 10px; left: 10px;
@@ -2611,31 +2699,9 @@ body {
   white-space: nowrap;
 }
 
-/* Footer below image */
-.tp-piece-footer {
-  padding: 10px 12px 11px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.tp-piece-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tp-piece-code {
-  font-size: 9px;
-  color: var(--text-dim);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.tp-piece-meta {
-  font-size: 9px;
-  color: var(--text-muted);
-}
+/* Legacy footer — not used in new layout but keep to avoid breakage */
+.tp-piece-footer { display: none; }
+.tp-piece-name, .tp-piece-code, .tp-piece-meta { display: none; }
 
 /* ── Detail panel (right / bottom-sheet) ── */
 .tp-detail {
@@ -3018,6 +3084,8 @@ body {
 @media (max-width: 640px) {
   .tp-body { padding: 14px; }
   .tp-grid { gap: 10px; }
+  .tp-piece-card-left { width: 32%; }
+  .tp-piece-card-right { min-height: 180px; }
   .tp-detail {
     width: 100%;
     height: 90%;

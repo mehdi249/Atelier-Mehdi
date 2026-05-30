@@ -269,37 +269,60 @@ function Colorways({ colorways, onChange }) {
 
 // ── PIECE GRID CARD ───────────────────────────────────────────
 
-function PieceCard({ piece, isSelected, onClick }) {
-  // Support both new `sketch` field and legacy `sketchFront` for backward compat
+function PieceCard({ piece, pieceNum, isSelected, onClick }) {
   const coverSrc  = piece.sketch?.src ?? piece.sketchFront?.src
   const pageCount = piece.sketch?.pages?.length ?? 0
+  const layers    = ['shell', 'lining', 'insulation']
+    .map(k => piece.fabricLayers?.[k])
+    .filter(l => l && (l.fabric || l.swatchSrc))
+  const classStr  = [piece.category, piece.season, piece.styleCode, piece.name].filter(Boolean).join(' / ')
 
   return (
     <div
       className={`tp-piece-card${isSelected ? ' selected' : ''}${piece.complete ? ' complete' : ''}`}
       onClick={onClick}
     >
-      <div className="tp-piece-cover">
-        {coverSrc
-          ? <img src={coverSrc} alt={piece.name} />
-          : (
-            <div className="tp-piece-cover-empty">
-              <span className="tp-piece-cover-plus">+</span>
-              <span className="tp-piece-cover-hint">Upload sketch</span>
-            </div>
-          )
-        }
+      {/* Header bar */}
+      <div className="tp-piece-card-header">
+        <span className="tp-piece-card-label">Style Overview | PAGE {String(pieceNum).padStart(2, '0')}</span>
+        <span className="tp-piece-card-name">{piece.name}</span>
+        {classStr && <span className="tp-piece-card-class">{classStr}</span>}
         <div className={`tp-piece-dot${piece.complete ? ' complete' : ''}`} />
-        {pageCount > 1 && <span className="tp-piece-pages">{pageCount} pages</span>}
       </div>
-      <div className="tp-piece-footer">
-        <span className="tp-piece-name">{piece.name}</span>
-        {piece.styleCode && <span className="tp-piece-code">{piece.styleCode}</span>}
-        {(piece.category || piece.season) && (
-          <span className="tp-piece-meta">
-            {[piece.category, piece.season].filter(Boolean).join(' · ')}
-          </span>
-        )}
+
+      {/* Body: left swatches + right sketch */}
+      <div className="tp-piece-card-body">
+        {/* Left — fabric swatches */}
+        <div className="tp-piece-card-left">
+          {layers.length > 0 ? layers.map((layer, i) => (
+            <div key={i} className="tp-piece-card-swatch">
+              {layer.swatchSrc
+                ? <img src={layer.swatchSrc} alt={layer.fabric} />
+                : <div className="tp-piece-card-swatch-empty" />}
+              <span className="tp-piece-card-swatch-label">
+                {[layer.fabric, layer.notes].filter(Boolean).join(': ')}
+              </span>
+            </div>
+          )) : (
+            <div className="tp-piece-card-left-empty">
+              <span>No fabrics</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right — sketch preview */}
+        <div className="tp-piece-card-right">
+          {coverSrc
+            ? <img src={coverSrc} alt={piece.name} className="tp-piece-card-sketch" />
+            : (
+              <div className="tp-piece-cover-empty">
+                <span className="tp-piece-cover-plus">+</span>
+                <span className="tp-piece-cover-hint">Upload tech pack</span>
+              </div>
+            )
+          }
+          {pageCount > 1 && <span className="tp-piece-pages">{pageCount} pages</span>}
+        </div>
       </div>
     </div>
   )
@@ -442,10 +465,11 @@ export default function StyleCards({ data, onChange }) {
           </div>
         ) : (
           <div className="tp-grid">
-            {pieces.map(piece => (
+            {pieces.map((piece, i) => (
               <PieceCard
                 key={piece.id}
                 piece={piece}
+                pieceNum={i + 1}
                 isSelected={selectedId === piece.id}
                 onClick={() => setSelectedId(selectedId === piece.id ? null : piece.id)}
               />
