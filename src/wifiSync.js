@@ -53,7 +53,7 @@ function fingerprint(dataUrl) {
   return `${dataUrl.length}:${dataUrl.slice(-50)}`
 }
 
-function serverBase(ip) { return `http://${ip}:4321` }
+function serverBase(ip) { return `https://${ip}:4321` }
 
 // ── Ping ──────────────────────────────────────────────────────────────────────
 export async function pingServer(ip) {
