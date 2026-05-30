@@ -2541,7 +2541,8 @@ body {
 
 /* Left image block */
 .tp-piece-cover {
-  width: 120px;
+  width: 200px;
+  min-height: 140px;
   flex-shrink: 0;
   background: var(--surface-3);
   position: relative;
@@ -3023,7 +3024,7 @@ body {
 @media (max-width: 640px) {
   .tp-body { padding: 14px; }
   .tp-grid { gap: 8px; }
-  .tp-piece-cover { width: 90px; }
+  .tp-piece-cover { width: 140px; min-height: 110px; }
   .tp-detail {
     width: 100%;
     height: 90%;
