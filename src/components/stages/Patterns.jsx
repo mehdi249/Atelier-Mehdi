@@ -635,10 +635,13 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onActiveVersion,
                 >
                   {isCover ? '✓ Cover' : 'Set as Cover'}
                 </button>
-                {activeVer?.originalData && (
+                {(activeVer?.originalData ?? activeVer?.src) && (
                   <button
                     className="tp-sketch-panel-cover-btn"
-                    onClick={() => downloadFile(activeVer.originalData, activeVer.originalName ?? activeVer.nativeName ?? 'file')}
+                    onClick={() => downloadFile(
+                      activeVer.originalData ?? activeVer.src,
+                      activeVer.originalName ?? activeVer.nativeName ?? `pattern-v${activeVer.versionNum}.jpg`
+                    )}
                   >
                     ↓ Download
                   </button>
