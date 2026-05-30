@@ -71,20 +71,34 @@ export default function SyncModal({ serverIP, serverReachable, wifiSyncStatus, o
               Run the sync server on your Mac, then enter its local IP address. Your designs will sync automatically over Wi-Fi.
             </p>
 
-            <label>Mac's Local IP Address</label>
+            <label>Mac's IP Address or Hostname</label>
             <input
               className="input"
-              placeholder="e.g. 192.168.1.5"
+              placeholder="e.g. 192.168.1.5  or  macbook.local"
               value={ip}
               onChange={e => setIp(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleConnect()}
               autoFocus
             />
             <p className="sync-note">
-              Start the server with <code>bash server/start.sh</code> — it prints the IP on startup. Or find it in System Settings → Wi-Fi → Details.
+              Start the server with <code>bash server/start.sh</code> — it prints the IP on startup. Or find it in System Settings → Wi-Fi → Details. You can also use your Mac's hostname (e.g. <code>macbook.local</code>).
             </p>
 
-            {error && <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{error}</p>}
+            {error && (
+              <div style={{ marginTop: 8 }}>
+                <p style={{ fontSize: 12, color: 'var(--danger)', margin: 0 }}>{error}</p>
+                {ip.trim() && (
+                  <a
+                    href={`https://${ip.trim()}:4321/ping`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: 12, color: 'var(--accent)', display: 'block', marginTop: 6 }}
+                  >
+                    Tap to test connection in Safari →
+                  </a>
+                )}
+              </div>
+            )}
 
             <div className="modal-actions">
               <button className="btn-ghost" onClick={onClose}>Cancel</button>
