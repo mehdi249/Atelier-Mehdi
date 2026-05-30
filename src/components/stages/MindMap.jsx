@@ -1,142 +1,187 @@
 import { useState, useRef, useEffect } from 'react'
 import { generateId, compressImage } from '../../utils'
 
-const NODE_W = 130
-const NODE_H = 44
-const CANVAS_W = 1100
-const CANVAS_H = 580
+const CANVAS_W = 1800
+const CANVAS_H = 1100
+// Screen-pixel padding around the canvas so nodes can be dragged in any direction
+const SCROLL_PAD = 2400
+
+const NODE_DIMS = {
+  root:   { w: 150, h: 52 },
+  branch: { w: 140, h: 44 },
+  leaf:   { w: 130, h: 38 },
+  image:  { w: 150, h: 110 },
+}
+function nd(node) { return NODE_DIMS[node.type] || NODE_DIMS.leaf }
 
 function getTypeForNew(nodes) {
   if (nodes.length === 0) return 'root'
-  if (nodes.length < 5) return 'branch'
+  if (nodes.filter(n => n.type !== 'root').length < 4) return 'branch'
   return 'leaf'
 }
 
 export default function MindMap({ data, onChange }) {
   const { nodes, edges } = data
-  const [dragState, setDragState] = useState(null)
-  const [editing, setEditing] = useState(null)
-  const [editText, setEditText] = useState('')
-  const [mode, setMode] = useState('default')
-  const [connectFrom, setConnectFrom] = useState(null)
-  const [selected, setSelected] = useState(null)
-  const canvasRef = useRef(null)
-  const dragOffRef = useRef({ x: 0, y: 0 })
-  const dataRef = useRef(data)
-  useEffect(() => { dataRef.current = data }, [data])
 
-  function addNode() {
-    const id = generateId()
-    const type = getTypeForNew(nodes)
-    onChange({
-      ...data,
-      nodes: [...nodes, {
-        id,
-        x: 80 + Math.random() * (CANVAS_W - NODE_W - 160),
-        y: 80 + Math.random() * (CANVAS_H - NODE_H - 160),
-        text: 'New Node',
-        type,
-      }]
-    })
+  const [zoom, setZoom]               = useState(0.72)
+  const [dragState, setDragState]     = useState(null)
+  const [editing, setEditing]         = useState(null)
+  const [editText, setEditText]       = useState('')
+  const [connectFrom, setConnectFrom] = useState(null)
+  const [selected, setSelected]       = useState(null)
+  const [toolbarPos, setToolbarPos]   = useState(null)
+
+  const canvasRef          = useRef(null)
+  const viewportRef        = useRef(null)
+  const wrapperRef         = useRef(null)
+  const toolbarRef         = useRef(null)
+  const toolbarDragOrigin  = useRef(null)
+  const dragOffRef         = useRef({ x: 0, y: 0 })
+  const dataRef            = useRef(data)
+  const zoomRef            = useRef(zoom)
+  const selectedRef        = useRef(null)
+  const pinchRef           = useRef(null)
+
+  const onChangeRef    = useRef(onChange)
+  const dragStateRef   = useRef(null)
+  const removeNodeRef  = useRef(null)
+  const removeEdgeRef  = useRef(null)
+  const undoRef        = useRef(null)
+
+  const histRef = useRef(null)
+  if (!histRef.current) histRef.current = { stack: [data], idx: 0 }
+
+  useEffect(() => { dataRef.current     = data },     [data])
+  useEffect(() => { zoomRef.current     = zoom },     [zoom])
+  useEffect(() => { selectedRef.current = selected }, [selected])
+  useEffect(() => { onChangeRef.current = onChange }, [onChange])
+
+  // Scroll to show the canvas on mount
+  useEffect(() => {
+    viewportRef.current?.scrollTo({ left: SCROLL_PAD, top: SCROLL_PAD, behavior: 'instant' })
+  }, [])
+
+  // ── History ──────────────────────────────────────────────────
+  function applyChange(newData) {
+    const { stack, idx } = histRef.current
+    const next = stack.slice(0, idx + 1).concat([newData])
+    if (next.length > 60) next.shift()
+    histRef.current = { stack: next, idx: next.length - 1 }
+    onChangeRef.current(newData)
   }
 
-  function deleteNode(nodeId) {
-    onChange({
+  function undo() {
+    const h = histRef.current
+    if (h.idx <= 0) return
+    h.idx--
+    onChangeRef.current(h.stack[h.idx])
+  }
+
+  function removeNode(nodeId) {
+    applyChange({
       ...dataRef.current,
       nodes: dataRef.current.nodes.filter(n => n.id !== nodeId),
       edges: dataRef.current.edges.filter(e => e.from !== nodeId && e.to !== nodeId),
     })
-    if (selected === `node-${nodeId}`) setSelected(null)
+    setSelected(null); setConnectFrom(null)
   }
 
-  function deleteEdge(edgeId) {
-    onChange({ ...dataRef.current, edges: dataRef.current.edges.filter(e => e.id !== edgeId) })
-    if (selected === `edge-${edgeId}`) setSelected(null)
+  function removeEdge(edgeId) {
+    applyChange({ ...dataRef.current, edges: dataRef.current.edges.filter(e => e.id !== edgeId) })
+    setSelected(null)
   }
 
-  function deleteSelected() {
-    if (!selected) return
-    if (selected.startsWith('node-')) deleteNode(selected.slice(5))
-    else if (selected.startsWith('edge-')) deleteEdge(selected.slice(5))
-  }
+  removeNodeRef.current = removeNode
+  removeEdgeRef.current = removeEdge
+  undoRef.current       = undo
 
-  function handleNodePointerDown(e, nodeId) {
-    if (e.detail >= 2) return
-    e.stopPropagation()
-    e.currentTarget.setPointerCapture(e.pointerId)
+  // ── Prevent browser Ctrl+Scroll from zooming page ────────────
+  useEffect(() => {
+    function stop(e) { if (e.ctrlKey || e.metaKey) e.preventDefault() }
+    document.addEventListener('wheel', stop, { passive: false })
+    return () => document.removeEventListener('wheel', stop)
+  }, [])
 
-    if (mode === 'connect') {
-      if (!connectFrom) {
-        setConnectFrom(nodeId)
-      } else if (connectFrom !== nodeId) {
-        const exists = dataRef.current.edges.some(
-          ed => (ed.from === connectFrom && ed.to === nodeId) || (ed.from === nodeId && ed.to === connectFrom)
-        )
-        if (!exists) {
-          onChange({
-            ...dataRef.current,
-            edges: [...dataRef.current.edges, { id: generateId(), from: connectFrom, to: nodeId }],
-          })
-        }
-        setConnectFrom(null)
+  // ── Ctrl+Scroll → canvas zoom ────────────────────────────────
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    function onWheel(e) {
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      setZoom(z => +Math.max(0.25, Math.min(2.5, z + (e.deltaY < 0 ? 0.08 : -0.08))).toFixed(2))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  // ── Pinch-to-zoom ────────────────────────────────────────────
+  useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
+    function dist(a, b) { return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) }
+    function onTouchStart(e) {
+      if (e.touches.length === 2) {
+        e.preventDefault()
+        pinchRef.current = { d: dist(e.touches[0], e.touches[1]), z: zoomRef.current }
       }
-      return
     }
-
-    if (mode === 'delete') {
-      deleteNode(nodeId)
-      return
+    function onTouchMove(e) {
+      if (e.touches.length === 2 && pinchRef.current) {
+        e.preventDefault()
+        setZoom(+Math.max(0.25, Math.min(2.5, pinchRef.current.z * dist(e.touches[0], e.touches[1]) / pinchRef.current.d)).toFixed(2))
+      }
     }
+    function onTouchEnd(e) { if (e.touches.length < 2) pinchRef.current = null }
+    el.addEventListener('touchstart', onTouchStart, { passive: false })
+    el.addEventListener('touchmove',  onTouchMove,  { passive: false })
+    el.addEventListener('touchend',   onTouchEnd,   { passive: false })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove',  onTouchMove)
+      el.removeEventListener('touchend',   onTouchEnd)
+    }
+  }, [])
 
-    const node = dataRef.current.nodes.find(n => n.id === nodeId)
+  // ── Keyboard (refs — no stale closures) ──────────────────────
+  useEffect(() => {
+    function onKey(e) {
+      const tag = document.activeElement?.tagName
+      if (e.key === 'Escape') { setConnectFrom(null); setSelected(null); return }
+      if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return
+        e.preventDefault(); undoRef.current?.(); return
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+        const sel = selectedRef.current
+        if (!sel) return
+        if (sel.startsWith('node-')) removeNodeRef.current?.(sel.slice(5))
+        else if (sel.startsWith('edge-')) removeEdgeRef.current?.(sel.slice(5))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // ── Canvas coordinates ───────────────────────────────────────
+  function toCanvas(clientX, clientY) {
     const rect = canvasRef.current.getBoundingClientRect()
-    dragOffRef.current = { x: e.clientX - rect.left - node.x, y: e.clientY - rect.top - node.y }
-    setDragState({ id: nodeId, x: node.x, y: node.y })
-    setSelected(`node-${nodeId}`)
+    return { x: (clientX - rect.left) / zoomRef.current, y: (clientY - rect.top) / zoomRef.current }
   }
 
-  function handlePointerMove(e) {
-    if (!dragState) return
-    const rect = canvasRef.current.getBoundingClientRect()
-    const x = Math.max(0, Math.min(CANVAS_W - NODE_W, e.clientX - rect.left - dragOffRef.current.x))
-    const y = Math.max(0, Math.min(CANVAS_H - NODE_H, e.clientY - rect.top - dragOffRef.current.y))
-    setDragState(s => ({ ...s, x, y }))
-  }
-
-  function handlePointerUp() {
-    if (!dragState) return
-    onChange({
+  // ── Add node ─────────────────────────────────────────────────
+  function addNode() {
+    const type = getTypeForNew(dataRef.current.nodes)
+    const { w, h } = NODE_DIMS[type]
+    applyChange({
       ...dataRef.current,
-      nodes: dataRef.current.nodes.map(n =>
-        n.id === dragState.id ? { ...n, x: dragState.x, y: dragState.y } : n
-      ),
+      nodes: [...dataRef.current.nodes, {
+        id: generateId(), type,
+        x: CANVAS_W / 2 - w / 2 + (Math.random() - 0.5) * 200,
+        y: CANVAS_H / 2 - h / 2 + (Math.random() - 0.5) * 200,
+        text: 'New Node',
+      }],
     })
-    setDragState(null)
-  }
-
-  function handleNodeDblClick(e, node) {
-    e.stopPropagation()
-    if (mode !== 'default') return
-    setEditing(node.id)
-    setEditText(node.text)
-  }
-
-  function commitEdit(nodeId) {
-    onChange({
-      ...dataRef.current,
-      nodes: dataRef.current.nodes.map(n => n.id === nodeId ? { ...n, text: editText.trim() || n.text } : n),
-    })
-    setEditing(null)
-  }
-
-  function getNodePos(node) {
-    if (dragState?.id === node.id) return { x: dragState.x, y: dragState.y }
-    return { x: node.x, y: node.y }
-  }
-
-  function nodeCenter(node) {
-    const pos = getNodePos(node)
-    return { x: pos.x + NODE_W / 2, y: pos.y + NODE_H / 2 }
   }
 
   async function handleImageImport(e) {
@@ -144,123 +189,300 @@ export default function MindMap({ data, onChange }) {
     if (!file) return
     e.target.value = ''
     const src = await compressImage(file)
-    const id = generateId()
-    onChange({
+    applyChange({
       ...dataRef.current,
       nodes: [...dataRef.current.nodes, {
-        id, src,
-        x: 80 + Math.random() * 300,
-        y: 80 + Math.random() * 200,
+        id: generateId(), src, type: 'image',
+        x: CANVAS_W / 2 - 75 + (Math.random() - 0.5) * 300,
+        y: CANVAS_H / 2 - 55 + (Math.random() - 0.5) * 200,
         text: file.name.replace(/\.[^.]+$/, ''),
-        type: 'image',
       }],
     })
   }
 
-  const cursor = mode === 'connect' ? 'crosshair' : mode === 'delete' ? 'not-allowed' : 'default'
+  function fitView() {
+    const n = dataRef.current.nodes
+    if (!n.length) { setZoom(0.72); return }
+    const pad = 80
+    const minX = Math.min(...n.map(nd => nd.x)) - pad
+    const minY = Math.min(...n.map(nd => nd.y)) - pad
+    const maxX = Math.max(...n.map(node => node.x + (NODE_DIMS[node.type] || NODE_DIMS.leaf).w)) + pad
+    const maxY = Math.max(...n.map(node => node.y + (NODE_DIMS[node.type] || NODE_DIMS.leaf).h)) + pad
+    const vW = viewportRef.current?.clientWidth  || 900
+    const vH = viewportRef.current?.clientHeight || 600
+    setZoom(+Math.max(0.25, Math.min(1.5, Math.min(vW / (maxX - minX), vH / (maxY - minY)))).toFixed(2))
+  }
+
+  // ── Connect ──────────────────────────────────────────────────
+  function startConnect(e, nodeId) {
+    e.stopPropagation(); e.preventDefault()
+    setConnectFrom(nodeId); setSelected(`node-${nodeId}`)
+  }
+
+  function completeConnect(targetId) {
+    if (!connectFrom || connectFrom === targetId) { setConnectFrom(null); return }
+    const exists = dataRef.current.edges.some(
+      ed => (ed.from === connectFrom && ed.to === targetId) ||
+            (ed.from === targetId && ed.to === connectFrom)
+    )
+    if (!exists) {
+      applyChange({
+        ...dataRef.current,
+        edges: [...dataRef.current.edges, { id: generateId(), from: connectFrom, to: targetId }],
+      })
+    }
+    setConnectFrom(null)
+  }
+
+  // ── Drag (dragStateRef — never stale) ────────────────────────
+  function handleNodePointerDown(e, nodeId) {
+    if (e.detail >= 2) return
+    e.stopPropagation()
+    if (connectFrom) { completeConnect(nodeId); return }
+    const node = dataRef.current.nodes.find(n => n.id === nodeId)
+    const pos  = toCanvas(e.clientX, e.clientY)
+    dragOffRef.current = { x: pos.x - node.x, y: pos.y - node.y }
+    const initial = { id: nodeId, x: node.x, y: node.y }
+    dragStateRef.current = initial
+    setDragState(initial)
+    setSelected(`node-${nodeId}`)
+  }
+
+  function handlePointerMove(e) {
+    if (!dragStateRef.current || pinchRef.current) return
+    const { x, y } = toCanvas(e.clientX, e.clientY)
+    // No clamping — canvas is unlimited
+    const next = {
+      ...dragStateRef.current,
+      x: x - dragOffRef.current.x,
+      y: y - dragOffRef.current.y,
+    }
+    dragStateRef.current = next
+    setDragState(next)
+  }
+
+  function handlePointerUp() {
+    const ds = dragStateRef.current
+    if (!ds) return
+    applyChange({
+      ...dataRef.current,
+      nodes: dataRef.current.nodes.map(n =>
+        n.id === ds.id ? { ...n, x: ds.x, y: ds.y } : n
+      ),
+    })
+    dragStateRef.current = null
+    setDragState(null)
+  }
+
+  function handleNodeDblClick(e, node) {
+    e.stopPropagation()
+    if (connectFrom) return
+    setEditing(node.id); setEditText(node.text)
+  }
+
+  function commitEdit(nodeId) {
+    applyChange({
+      ...dataRef.current,
+      nodes: dataRef.current.nodes.map(n =>
+        n.id === nodeId ? { ...n, text: editText.trim() || n.text } : n
+      ),
+    })
+    setEditing(null)
+  }
+
+  function handleCanvasClick() {
+    if (connectFrom) { setConnectFrom(null); return }
+    setSelected(null)
+  }
+
+  // ── Toolbar drag ─────────────────────────────────────────
+  function startToolbarDrag(e) {
+    e.stopPropagation()
+    e.preventDefault()
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
+    const wRect = wrapperRef.current.getBoundingClientRect()
+    const tRect = toolbarRef.current.getBoundingClientRect()
+    toolbarDragOrigin.current = {
+      pointerX: e.clientX,
+      pointerY: e.clientY,
+      startLeft: tRect.left - wRect.left,
+      startTop:  tRect.top  - wRect.top,
+    }
+  }
+
+  // ── Geometry ─────────────────────────────────────────────────
+  function getPos(node) {
+    const ds = dragStateRef.current
+    if (ds?.id === node.id) return { x: ds.x, y: ds.y }
+    return { x: node.x, y: node.y }
+  }
+
+  function center(node) {
+    const pos = getPos(node), { w, h } = nd(node)
+    return { x: pos.x + w / 2, y: pos.y + h / 2 }
+  }
+
+  function bezier(a, b) {
+    const mx = (a.x + b.x) / 2
+    return `M ${a.x} ${a.y} C ${mx} ${a.y} ${mx} ${b.y} ${b.x} ${b.y}`
+  }
+
+  const isConnecting = !!connectFrom
 
   return (
-    <div className="mindmap-wrapper">
-      <div className="mindmap-toolbar">
-        <button className={`btn-ghost-sm${mode === 'default' ? ' active' : ''}`} onClick={() => { setMode('default'); setConnectFrom(null) }}>
-          Select
-        </button>
-        <button className="btn-ghost-sm" onClick={addNode}>+ Node</button>
+    <div className="mm-wrapper" ref={wrapperRef}>
+      {/* ── Floating toolbar island ── */}
+      <div
+        className="mm-toolbar"
+        ref={toolbarRef}
+        style={toolbarPos ? { left: toolbarPos.x, top: toolbarPos.y, transform: 'none' } : {}}
+        onPointerMove={e => {
+          if (!toolbarDragOrigin.current) return
+          e.stopPropagation()
+          const { pointerX, pointerY, startLeft, startTop } = toolbarDragOrigin.current
+          setToolbarPos({ x: startLeft + (e.clientX - pointerX), y: startTop + (e.clientY - pointerY) })
+        }}
+        onPointerUp={() => { toolbarDragOrigin.current = null }}
+      >
         <button
-          className={`btn-ghost-sm${mode === 'connect' ? ' active' : ''}`}
-          onClick={() => { setMode(m => m === 'connect' ? 'default' : 'connect'); setConnectFrom(null) }}
-        >
-          {mode === 'connect' ? (connectFrom ? 'Pick target…' : 'Connect: pick source') : 'Connect'}
-        </button>
-        <button
-          className={`btn-ghost-sm${mode === 'delete' ? ' active' : ''}`}
-          onClick={() => setMode(m => m === 'delete' ? 'default' : 'delete')}
-        >
-          Delete Mode
-        </button>
-        <label className="btn-ghost-sm file-label">
-          Import Image
-          <input type="file" accept="image/*" onChange={handleImageImport} style={{ display: 'none' }} />
-        </label>
-        {selected && mode === 'default' && (
-          <button className="btn-ghost-sm danger" onClick={deleteSelected}>Remove Selected</button>
+          className="mm-btn mm-drag-handle"
+          onPointerDown={startToolbarDrag}
+          title="Move toolbar"
+        >⠿</button>
+        <div className="mm-sep" />
+        <div className="mm-group">
+          <button className="mm-btn" onClick={addNode} title="Add Node">+</button>
+          <label className="mm-btn mm-file-btn" title="Import image">
+            ⊞
+            <input type="file" accept="image/*" onChange={handleImageImport} style={{ display: 'none' }} />
+          </label>
+        </div>
+        <div className="mm-sep" />
+        <div className="mm-group">
+          <button className="mm-btn" onClick={undo} title="Undo (⌘Z)">↺</button>
+        </div>
+        <div className="mm-sep" />
+        <div className="mm-group">
+          <button className="mm-btn" onClick={() => setZoom(z => +Math.max(0.25, z - 0.12).toFixed(2))} title="Zoom Out">−</button>
+          <span className="mm-zoom">{Math.round(zoom * 100)}%</span>
+          <button className="mm-btn" onClick={() => setZoom(z => +Math.min(2.5, z + 0.12).toFixed(2))} title="Zoom In">+</button>
+          <button className="mm-btn" onClick={fitView} title="Fit all nodes">⊡</button>
+        </div>
+        {isConnecting && (
+          <>
+            <div className="mm-sep" />
+            <span className="mm-connect-status">Tap node to connect</span>
+            <button className="mm-btn" onClick={() => setConnectFrom(null)} title="Cancel">✕</button>
+          </>
         )}
       </div>
 
-      <div className="mindmap-outer">
-        <div
-          className="mindmap-canvas-wrap"
-          ref={canvasRef}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          style={{ cursor }}
-          onClick={() => { if (mode === 'connect' && !connectFrom) return; setSelected(null) }}
-        >
-          <svg className="mindmap-svg">
-            {edges.map(edge => {
-              const fromNode = nodes.find(n => n.id === edge.from)
-              const toNode = nodes.find(n => n.id === edge.to)
-              if (!fromNode || !toNode) return null
-              const from = nodeCenter(fromNode)
-              const to = nodeCenter(toNode)
-              const isSelected = selected === `edge-${edge.id}`
-              return (
-                <line
-                  key={edge.id}
-                  x1={from.x} y1={from.y}
-                  x2={to.x} y2={to.y}
-                  className={`mindmap-edge${isSelected ? ' selected' : ''}`}
-                  style={{ pointerEvents: 'stroke' }}
-                  onClick={e => {
-                    e.stopPropagation()
-                    if (mode === 'delete') { deleteEdge(edge.id); return }
-                    setSelected(s => s === `edge-${edge.id}` ? null : `edge-${edge.id}`)
-                  }}
-                />
-              )
-            })}
-          </svg>
+      {/* ── Viewport ── */}
+      <div className="mm-viewport" ref={viewportRef}>
+        {/* Scroll container: SCROLL_PAD px of empty space on all sides */}
+        <div style={{
+          position:  'relative',
+          width:     CANVAS_W * zoom + SCROLL_PAD * 2,
+          height:    CANVAS_H * zoom + SCROLL_PAD * 2,
+          flexShrink: 0,
+        }}>
+          {/* Offset wrapper positions canvas at (SCROLL_PAD, SCROLL_PAD) */}
+          <div style={{ position: 'absolute', left: SCROLL_PAD, top: SCROLL_PAD }}>
+            <div
+              className="mm-canvas"
+              ref={canvasRef}
+              style={{ transform: `scale(${zoom})`, transformOrigin: '0 0', cursor: isConnecting ? 'crosshair' : 'default' }}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onClick={handleCanvasClick}
+            >
+              {/* SVG edges */}
+              <svg style={{ position:'absolute', inset:0, width:'100%', height:'100%', overflow:'visible', pointerEvents:'none' }}>
+                {edges.map(edge => {
+                  const fn = nodes.find(n => n.id === edge.from)
+                  const tn = nodes.find(n => n.id === edge.to)
+                  if (!fn || !tn) return null
+                  const isSel = selected === `edge-${edge.id}`
+                  return (
+                    <path
+                      key={edge.id}
+                      d={bezier(center(fn), center(tn))}
+                      className={`mm-edge${isSel ? ' selected' : ''}`}
+                      style={{ pointerEvents: 'stroke' }}
+                      onClick={e => { e.stopPropagation(); setSelected(s => s === `edge-${edge.id}` ? null : `edge-${edge.id}`) }}
+                    />
+                  )
+                })}
+              </svg>
 
-          {nodes.map(node => {
-            const pos = getNodePos(node)
-            const isSelected = selected === `node-${node.id}`
-            const isSource = connectFrom === node.id
-            return (
-              <div
-                key={node.id}
-                className={`mindmap-node type-${node.type}${isSelected ? ' selected' : ''}${isSource ? ' connect-source' : ''}`}
-                style={{
-                  left: pos.x,
-                  top: pos.y,
-                  width: node.type === 'image' ? 140 : NODE_W,
-                  height: node.type === 'image' ? 100 : (node.type === 'root' ? 48 : node.type === 'branch' ? 40 : 36),
-                }}
-                onPointerDown={e => handleNodePointerDown(e, node.id)}
-                onDoubleClick={e => handleNodeDblClick(e, node)}
-              >
-                {node.type === 'image' ? (
-                  <img src={node.src} alt={node.text} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 4, pointerEvents: 'none' }} />
-                ) : editing === node.id ? (
-                  <input
-                    className="node-input"
-                    value={editText}
-                    autoFocus
-                    onChange={e => setEditText(e.target.value)}
-                    onBlur={() => commitEdit(node.id)}
-                    onKeyDown={e => { if (e.key === 'Enter') commitEdit(node.id); if (e.key === 'Escape') setEditing(null) }}
-                    onPointerDown={e => e.stopPropagation()}
-                  />
-                ) : (
-                  <span className="node-text">{node.text}</span>
-                )}
-              </div>
-            )
-          })}
+              {/* Nodes */}
+              {nodes.map(node => {
+                const pos  = getPos(node)
+                const { w, h } = nd(node)
+                const isSel = selected === `node-${node.id}`
+                const isSrc = connectFrom === node.id
+                return (
+                  <div key={node.id} style={{ position: 'absolute', left: pos.x, top: pos.y }}>
+                    {isSel && !isConnecting && (
+                      <div className="mm-node-actions" style={{ minWidth: w }}>
+                        <button
+                          className="mm-action-btn mm-action-delete"
+                          onPointerDown={e => { e.stopPropagation(); removeNode(node.id) }}
+                        >Delete</button>
+                        {node.type !== 'image' && (
+                          <>
+                            <div className="mm-action-sep" />
+                            <button
+                              className="mm-action-btn"
+                              onPointerDown={e => startConnect(e, node.id)}
+                            >Connect</button>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    <div
+                      className={`mm-node type-${node.type}${isSel ? ' sel' : ''}${isSrc ? ' src' : ''}`}
+                      style={{ width: w, height: h }}
+                      onPointerDown={e => {
+                        try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
+                        handleNodePointerDown(e, node.id)
+                      }}
+                      onPointerMove={handlePointerMove}
+                      onPointerUp={handlePointerUp}
+                      onDoubleClick={e => handleNodeDblClick(e, node)}
+                    >
+                      {node.type === 'image' ? (
+                        <img
+                          src={node.src}
+                          alt={node.text}
+                          style={{ width:'100%', height:'100%', objectFit:'cover', borderRadius:8, pointerEvents:'none' }}
+                        />
+                      ) : editing === node.id ? (
+                        <input
+                          className="mm-node-input"
+                          value={editText}
+                          autoFocus
+                          onChange={e => setEditText(e.target.value)}
+                          onBlur={() => commitEdit(node.id)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') commitEdit(node.id)
+                            if (e.key === 'Escape') setEditing(null)
+                            e.stopPropagation()
+                          }}
+                          onPointerDown={e => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span className="mm-node-text">{node.text}</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </div>
       </div>
-
-      <p className="mindmap-hint">Double-click to edit · Drag to move · Use Connect to link nodes · Click edge to select and remove it</p>
     </div>
   )
 }

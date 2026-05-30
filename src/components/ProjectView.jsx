@@ -1,21 +1,36 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import MindMap from './stages/MindMap'
 import Research from './stages/Research'
 import Sketches from './stages/Sketches'
 import StyleCards from './stages/StyleCards'
+import Patterns from './stages/Patterns'
 import GenericStage from './stages/GenericStage'
 import Lookbook from './stages/Lookbook'
-import { calculateProgress, exportCollectionJSON } from '../utils'
+import { exportCollectionJSON, exportMindMapSVG } from '../utils'
+
+const MindMapIcon = () => (
+  <svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor">
+    <circle cx="10" cy="10" r="2.5"/>
+    <line x1="8.2" y1="8.2" x2="4" y2="4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <circle cx="3" cy="3" r="1.8"/>
+    <line x1="11.8" y1="8.2" x2="16" y2="4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <circle cx="17" cy="3" r="1.8"/>
+    <line x1="8.2" y1="11.8" x2="4" y2="16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <circle cx="3" cy="17" r="1.8"/>
+    <line x1="11.8" y1="11.8" x2="16" y2="16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <circle cx="17" cy="17" r="1.8"/>
+  </svg>
+)
 
 const STAGES = [
-  { key: 'mindMap',      label: 'Mind Map',    icon: '◎' },
-  { key: 'research',     label: 'Research',    icon: '◈' },
-  { key: 'sketches',     label: 'Sketches',    icon: '◇' },
-  { key: 'styleCards',   label: 'Style Cards', icon: '◆' },
-  { key: 'patterns',     label: 'Patterns',    icon: '◐' },
-  { key: 'clo3d',        label: 'CLO3D',       icon: '◉' },
-  { key: 'construction', label: 'Construction',icon: '◑' },
-  { key: 'lookbook',     label: 'Lookbook',    icon: '◼' },
+  { key: 'mindMap',      label: 'Mind Map',     icon: <MindMapIcon /> },
+  { key: 'research',     label: 'Research',     icon: '◎' },
+  { key: 'sketches',     label: 'Sketches',     icon: '✐' },
+  { key: 'styleCards',   label: 'Style Cards',  icon: '⊟' },
+  { key: 'patterns',     label: 'Patterns',     icon: '⊞' },
+  { key: 'clo3d',        label: 'CLO3D',        icon: '⬢' },
+  { key: 'construction', label: 'Construction', icon: '◫' },
+  { key: 'lookbook',     label: 'Lookbook',     icon: '▣' },
 ]
 
 export default function ProjectView({ collection, onUpdate, onUpdateStage, onDelete, onBack }) {
@@ -24,10 +39,17 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
   const [editName, setEditName] = useState(collection.name)
   const [editTagline, setEditTagline] = useState(collection.tagline)
   const [editColor, setEditColor] = useState(collection.coverColor)
-  const [showProgressModal, setShowProgressModal] = useState(false)
-  const [progressVal, setProgressVal] = useState('')
+  const [exportOpen, setExportOpen] = useState(false)
+  const exportRef = useRef(null)
 
-  const progress = calculateProgress(collection)
+  useEffect(() => {
+    if (!exportOpen) return
+    function close(e) {
+      if (exportRef.current && !exportRef.current.contains(e.target)) setExportOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [exportOpen])
 
   function saveEdit() {
     const trimmed = editName.trim().toUpperCase()
@@ -39,17 +61,6 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
     setEditing(false)
   }
 
-  function openProgressModal() {
-    setProgressVal(collection.progressOverride ?? '')
-    setShowProgressModal(true)
-  }
-
-  function applyProgress() {
-    const val = progressVal === '' ? null : Math.max(0, Math.min(100, Number(progressVal)))
-    onUpdate(() => ({ progressOverride: val }))
-    setShowProgressModal(false)
-  }
-
   function renderStage() {
     const stageData = collection.stages[activeStage]
     const update = (data) => onUpdateStage(activeStage, data)
@@ -58,7 +69,7 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
       case 'research':     return <Research data={stageData} onChange={update} />
       case 'sketches':     return <Sketches data={stageData} onChange={update} />
       case 'styleCards':   return <StyleCards data={stageData} onChange={update} />
-      case 'patterns':     return <GenericStage title="Patterns" data={stageData} onChange={update} />
+      case 'patterns':     return <Patterns data={stageData} onChange={update} />
       case 'clo3d':        return <GenericStage title="CLO3D" data={stageData} onChange={update} />
       case 'construction': return <GenericStage title="Construction" data={stageData} onChange={update} />
       case 'lookbook':     return <Lookbook data={stageData} onChange={update} />
@@ -88,7 +99,7 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
                 value={editTagline}
                 onChange={e => setEditTagline(e.target.value)}
                 placeholder="Tagline"
-                style={{ width: 220 }}
+                style={{ width: 200 }}
               />
               <input
                 type="color"
@@ -108,67 +119,63 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
                 <h2 className="project-name">{collection.name}</h2>
                 {collection.tagline && <p className="project-tagline">{collection.tagline}</p>}
               </div>
-              <button className="btn-icon" onClick={() => { setEditName(collection.name); setEditTagline(collection.tagline); setEditColor(collection.coverColor); setEditing(true) }} title="Edit">
-                ✎
-              </button>
+              <button
+                className="btn-icon"
+                onClick={() => { setEditName(collection.name); setEditTagline(collection.tagline); setEditColor(collection.coverColor); setEditing(true) }}
+                title="Edit collection"
+              >✎</button>
             </div>
           )}
         </div>
 
         <div className="project-header-right">
-          <div className="progress-area">
-            <div className="progress-bar-thin">
-              <div className="progress-fill-thin" style={{ width: `${progress}%` }} />
-            </div>
-            <button className="progress-pct-btn" onClick={openProgressModal} title="Override progress">
-              {progress}%
+          <div className="export-wrap" ref={exportRef}>
+            <button className="btn-ghost-sm" onClick={() => setExportOpen(o => !o)}>
+              Export ↓
             </button>
+            {exportOpen && (
+              <div className="export-menu">
+                <button onClick={() => { exportCollectionJSON(collection); setExportOpen(false) }}>
+                  Export JSON
+                </button>
+                {activeStage === 'mindMap' && (
+                  <button onClick={() => {
+                    exportMindMapSVG(
+                      collection.stages.mindMap.nodes,
+                      collection.stages.mindMap.edges,
+                      collection.name
+                    )
+                    setExportOpen(false)
+                  }}>
+                    Mind Map SVG
+                  </button>
+                )}
+                <button onClick={() => { window.print(); setExportOpen(false) }}>
+                  Print / PDF
+                </button>
+              </div>
+            )}
           </div>
-          <button className="btn-ghost-sm" onClick={() => exportCollectionJSON(collection)}>JSON</button>
-          <button className="btn-ghost-sm" onClick={() => window.print()}>PDF</button>
-          <button
-            className="btn-danger-sm"
-            onClick={() => { if (window.confirm(`Delete "${collection.name}"?`)) onDelete() }}
-          >Delete</button>
         </div>
       </div>
 
-      {showProgressModal && (
-        <div className="modal-overlay" onClick={() => setShowProgressModal(false)}>
-          <div className="modal small" onClick={e => e.stopPropagation()}>
-            <h3>Override Progress</h3>
-            <p className="text-muted">Auto-calculated: {calculateProgress({ ...collection, progressOverride: null })}%</p>
-            <input
-              className="input"
-              type="number"
-              min="0"
-              max="100"
-              value={progressVal}
-              onChange={e => setProgressVal(e.target.value)}
-              placeholder="0–100"
-              autoFocus
-            />
-            <div className="modal-actions">
-              <button className="btn-ghost" onClick={() => { onUpdate(() => ({ progressOverride: null })); setShowProgressModal(false) }}>
-                Reset to Auto
-              </button>
-              <button className="btn-primary" onClick={applyProgress}>Apply</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <nav className="stage-nav">
-        {STAGES.map(s => (
-          <button
-            key={s.key}
-            className={`stage-tab${activeStage === s.key ? ' active' : ''}`}
-            onClick={() => setActiveStage(s.key)}
-          >
-            <span className="stage-icon">{s.icon}</span>
-            <span className="stage-label">{s.label}</span>
-          </button>
-        ))}
+        {STAGES.map(s => {
+          const isTPComplete = s.key === 'styleCards' &&
+            collection.stages.styleCards?.pieces?.length > 0 &&
+            collection.stages.styleCards.pieces.every(p => p.complete)
+          return (
+            <button
+              key={s.key}
+              className={`stage-tab${activeStage === s.key ? ' active' : ''}`}
+              onClick={() => setActiveStage(s.key)}
+            >
+              <span className="stage-icon">{s.icon}</span>
+              <span className="stage-label">{s.label}</span>
+              {isTPComplete && <span className="tp-tab-check">✓</span>}
+            </button>
+          )
+        })}
       </nav>
 
       <div className="stage-content">
