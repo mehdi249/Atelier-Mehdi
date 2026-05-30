@@ -28,72 +28,97 @@ function blobToDataUrl(blob) {
   })
 }
 
+// Scan raw bytes for the first embedded PNG or JPEG — works when ZIP entries
+// are stored uncompressed (method 0), which is common for already-compressed images.
+async function scanForEmbeddedImage(bytes) {
+  // PNG: 89 50 4E 47 0D 0A 1A 0A  →  IEND chunk: 49 45 4E 44 AE 42 60 82
+  const PNG_SIG  = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+  const PNG_IEND = [0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]
+  for (let i = 0; i < bytes.length - 8; i++) {
+    if (PNG_SIG.every((b, j) => bytes[i + j] === b)) {
+      for (let j = i + 8; j <= bytes.length - 8; j++) {
+        if (PNG_IEND.every((b, k) => bytes[j + k] === b)) {
+          try {
+            return await blobToDataUrl(new Blob([bytes.slice(i, j + 8)], { type: 'image/png' }))
+          } catch (_) { break }
+        }
+      }
+    }
+  }
+  // JPEG: FF D8 FF  →  end marker FF D9
+  for (let i = 0; i < bytes.length - 4; i++) {
+    if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8 && bytes[i + 2] === 0xFF) {
+      for (let j = i + 4; j < bytes.length - 1; j++) {
+        if (bytes[j] === 0xFF && bytes[j + 1] === 0xD9) {
+          try {
+            return await blobToDataUrl(new Blob([bytes.slice(i, j + 2)], { type: 'image/jpeg' }))
+          } catch (_) { break }
+        }
+      }
+    }
+  }
+  return null
+}
+
 async function extractZprjPreview(file) {
+  const buffer = await file.arrayBuffer()
+  const bytes  = new Uint8Array(buffer)
+
+  // ① Try fflate ZIP extraction — pick the largest image (best render quality)
   try {
     const { unzipSync } = await import('fflate')
-    const buffer  = await file.arrayBuffer()
-    const entries = unzipSync(new Uint8Array(buffer))
+    const entries = unzipSync(bytes)
     const keys    = Object.keys(entries)
 
-    // CLO3D stores renders in gallery/, thumbnails/, or icon/ folders
-    const ranked = [
-      ...keys.filter(k => /\.(png|jpe?g)$/i.test(k) && /gallery|thumb|preview/i.test(k)),
-      ...keys.filter(k => /\.(png|jpe?g)$/i.test(k)),
-    ]
-    const key = ranked[0]
-    if (!key) return null
+    const images = keys
+      .filter(k => /\.(png|jpe?g?)$/i.test(k) && entries[k].length > 1024)
+      .sort((a, b) => {
+        // Prefer gallery/screenshot/render paths; otherwise take the largest file
+        const scoreA = /gallery|screenshot|render|thumb/i.test(a) ? 1e8 : 0
+        const scoreB = /gallery|screenshot|render|thumb/i.test(b) ? 1e8 : 0
+        return (scoreB + entries[b].length) - (scoreA + entries[a].length)
+      })
 
-    const mime = /\.png$/i.test(key) ? 'image/png' : 'image/jpeg'
-    return await blobToDataUrl(new Blob([entries[key]], { type: mime }))
+    if (images.length > 0) {
+      const key  = images[0]
+      const mime = /\.png$/i.test(key) ? 'image/png' : 'image/jpeg'
+      const result = await blobToDataUrl(new Blob([entries[key]], { type: mime }))
+      if (result) return result
+    }
   } catch (e) {
-    console.warn('ZPRJ preview extraction failed:', e)
-    return null
+    console.warn('fflate ZPRJ parse failed, falling back to raw scan:', e.message)
   }
+
+  // ② Fallback: CLO3D often stores PNG renders uncompressed inside the ZIP,
+  //    so their raw bytes are visible in the file and can be sliced out directly.
+  return await scanForEmbeddedImage(bytes)
 }
 
 async function extractOptitexPreview(file) {
-  try {
-    const buffer = await file.arrayBuffer()
-    const bytes  = new Uint8Array(buffer)
+  const buffer = await file.arrayBuffer()
+  const bytes  = new Uint8Array(buffer)
 
-    // Some newer PDS/OPF are ZIP-based — try that first
-    if (bytes[0] === 0x50 && bytes[1] === 0x4B) {
+  // ① If ZIP-based (newer PDS/OPF), try fflate
+  if (bytes[0] === 0x50 && bytes[1] === 0x4B) {
+    try {
       const { unzipSync } = await import('fflate')
       const entries = unzipSync(bytes)
-      const key = Object.keys(entries).find(k => /\.(png|jpe?g)$/i.test(k))
-      if (key) {
+      const images  = Object.keys(entries)
+        .filter(k => /\.(png|jpe?g?)$/i.test(k) && entries[k].length > 1024)
+        .sort((a, b) => entries[b].length - entries[a].length)
+      if (images.length > 0) {
+        const key  = images[0]
         const mime = /\.png$/i.test(key) ? 'image/png' : 'image/jpeg'
-        return await blobToDataUrl(new Blob([entries[key]], { type: mime }))
+        const result = await blobToDataUrl(new Blob([entries[key]], { type: mime }))
+        if (result) return result
       }
+    } catch (e) {
+      console.warn('fflate Optitex parse failed:', e.message)
     }
-
-    // Scan binary for embedded PNG (89 50 4E 47 … 49 45 4E 44 AE 42 60 82)
-    const PNG_SIG  = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
-    const PNG_IEND = [0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]
-    for (let i = 0; i < bytes.length - 8; i++) {
-      if (PNG_SIG.every((b, j) => bytes[i + j] === b)) {
-        for (let j = i + 8; j <= bytes.length - 8; j++) {
-          if (PNG_IEND.every((b, k) => bytes[j + k] === b)) {
-            return await blobToDataUrl(new Blob([bytes.slice(i, j + 8)], { type: 'image/png' }))
-          }
-        }
-      }
-    }
-
-    // Scan for embedded JPEG (FF D8 FF … FF D9)
-    for (let i = 0; i < bytes.length - 4; i++) {
-      if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8 && bytes[i + 2] === 0xFF) {
-        for (let j = i + 4; j < bytes.length - 1; j++) {
-          if (bytes[j] === 0xFF && bytes[j + 1] === 0xD9) {
-            return await blobToDataUrl(new Blob([bytes.slice(i, j + 2)], { type: 'image/jpeg' }))
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('Optitex preview extraction failed:', e)
   }
-  return null
+
+  // ② Raw binary scan for embedded preview image
+  return await scanForEmbeddedImage(bytes)
 }
 
 function createVersion(num) {
