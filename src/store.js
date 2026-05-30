@@ -15,44 +15,50 @@ import {
   saveToFolder,
   loadFromFolder,
 } from './fsStorage'
+import { idbLoad, idbSave } from './idbStore'
 
-const STORAGE_KEY = 'atelier-mehdi-v1'
+const LS_KEY = 'atelier-mehdi-v1'
 
-function loadState() {
+// Synchronous seed: read localStorage so the first render is instant.
+// IndexedDB (async) is loaded after mount and replaces this if it has data.
+function seedState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(LS_KEY)
     if (raw) {
-      const parsed = JSON.parse(raw)
-      if (parsed?.collections?.length > 0) return parsed
+      const p = JSON.parse(raw)
+      if (p?.collections?.length > 0) return p
     }
   } catch {}
   return { collections: [createBaranTemplate()] }
 }
 
 export function useStore() {
-  const [state, setState] = useState(loadState)
+  const [state, setState] = useState(seedState)
   const [syncConfig, setSyncConfig] = useState(loadSyncConfig)
   const [syncStatus, setSyncStatus] = useState('idle')
   const [folderHandle, setFolderHandle] = useState(null)
-  const [folderStatus, setFolderStatus] = useState('idle') // 'idle'|'loading'|'saving'|'saved'|'error'
+  const [folderStatus, setFolderStatus] = useState('idle')
 
-  // Always-current refs to avoid stale closures
   const stateRef      = useRef(state)
   const syncConfigRef = useRef(syncConfig)
   const folderRef     = useRef(null)
   const skipNextPush  = useRef(false)
+  const idbReady      = useRef(false)  // true once IDB has loaded
 
   useEffect(() => { stateRef.current = state }, [state])
   useEffect(() => { syncConfigRef.current = syncConfig }, [syncConfig])
 
-  // ── Persist to localStorage on every state change ─────────────────────────
+  // ── On mount: load from IndexedDB (replaces the localStorage seed) ─────────
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    } catch (e) {
-      console.warn('localStorage quota exceeded — images may not persist:', e)
-    }
-  }, [state])
+    idbLoad().then(data => {
+      if (data?.collections?.length > 0) {
+        skipNextPush.current = true
+        setState(data)
+      }
+      idbReady.current = true
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── On mount: try to restore iCloud folder ────────────────────────────────
   useEffect(() => {
@@ -102,6 +108,17 @@ export function useStore() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Persist to IndexedDB on every state change (primary store) ────────────
+  useEffect(() => {
+    if (!idbReady.current) return   // don't overwrite IDB before we've read it
+    idbSave(stateRef.current)
+    // Also keep a lean localStorage copy as a fast seed for next page load
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(stateRef.current))
+    } catch (_) {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state])
+
   // ── Debounced save to iCloud folder on state change ───────────────────────
   useEffect(() => {
     const handle = folderRef.current
@@ -119,22 +136,16 @@ export function useStore() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 
-  // ── Debounced push to Gist on state change ────────────────────────────────
+  // ── Debounced Gist push on state change ───────────────────────────────────
   useEffect(() => {
     const cfg = syncConfigRef.current
     if (!cfg) return
-    if (skipNextPush.current) {
-      skipNextPush.current = false
-      return
-    }
+    if (skipNextPush.current) { skipNextPush.current = false; return }
     setSyncStatus('syncing')
     const timer = setTimeout(() => {
       pushToGist(cfg.token, cfg.gistId, stateRef.current)
         .then(() => setSyncStatus('synced'))
-        .catch(err => {
-          console.warn('Gist push failed:', err)
-          setSyncStatus('error')
-        })
+        .catch(err => { console.warn('Gist push failed:', err); setSyncStatus('error') })
     }, 2500)
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,17 +157,12 @@ export function useStore() {
     let gistId = existingGistId?.trim() || null
     if (gistId) {
       const data = await fetchFromGist(token, gistId)
-      if (data?.collections?.length > 0) {
-        skipNextPush.current = true
-        setState(data)
-      }
+      if (data?.collections?.length > 0) { skipNextPush.current = true; setState(data) }
     } else {
       gistId = await createGist(token, stateRef.current)
     }
     const cfg = { token, gistId }
-    saveSyncConfig(cfg)
-    setSyncConfig(cfg)
-    setSyncStatus('synced')
+    saveSyncConfig(cfg); setSyncConfig(cfg); setSyncStatus('synced')
     return { gistId }
   }, [])
 
@@ -166,30 +172,21 @@ export function useStore() {
     setSyncStatus('syncing')
     try {
       const data = await fetchFromGist(cfg.token, cfg.gistId)
-      if (data?.collections?.length > 0) {
-        skipNextPush.current = true
-        setState(data)
-      }
+      if (data?.collections?.length > 0) { skipNextPush.current = true; setState(data) }
       setSyncStatus('synced')
-    } catch (err) {
-      console.warn('Manual pull failed:', err)
-      setSyncStatus('error')
-    }
+    } catch (err) { console.warn('Manual pull failed:', err); setSyncStatus('error') }
   }, [])
 
   const disconnectGist = useCallback(() => {
-    saveSyncConfig(null)
-    setSyncConfig(null)
-    setSyncStatus('idle')
+    saveSyncConfig(null); setSyncConfig(null); setSyncStatus('idle')
   }, [])
 
   // ── Folder callbacks ──────────────────────────────────────────────────────
 
   const connectFolder = useCallback(async () => {
-    const handle = await pickFolder()   // throws if user cancels
+    const handle = await pickFolder()
     folderRef.current = handle
     setFolderStatus('saving')
-    // Migrate existing data to the new folder on first connect
     await saveToFolder(handle, stateRef.current)
     setFolderHandle(handle)
     setFolderStatus('saved')
@@ -222,16 +219,12 @@ export function useStore() {
     }))
   }, [])
 
-  const addCollection = useCallback((collection) => {
-    setState(s => ({ ...s, collections: [...s.collections, collection] }))
-  }, [])
-
-  const deleteCollection = useCallback((id) => {
-    setState(s => ({ ...s, collections: s.collections.filter(c => c.id !== id) }))
-  }, [])
+  const addCollection    = useCallback(c  => setState(s => ({ ...s, collections: [...s.collections, c] })), [])
+  const deleteCollection = useCallback(id => setState(s => ({ ...s, collections: s.collections.filter(c => c.id !== id) })), [])
 
   return {
     state,
+    setState,
     updateCollection,
     updateStage,
     addCollection,

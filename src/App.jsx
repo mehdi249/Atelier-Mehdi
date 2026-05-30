@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useStore } from './store'
+import { idbSave } from './idbStore'
 import Dashboard from './components/Dashboard'
 import ProjectView from './components/ProjectView'
 import PullToRefresh from './components/PullToRefresh'
@@ -7,6 +8,7 @@ import PullToRefresh from './components/PullToRefresh'
 export default function App() {
   const {
     state,
+    setState,
     updateCollection,
     updateStage,
     addCollection,
@@ -22,6 +24,11 @@ export default function App() {
     disconnectFolder,
   } = useStore()
   const [currentView, setCurrentView] = useState('dashboard')
+
+  const handleImportState = useCallback(async (data) => {
+    setState(data)
+    await idbSave(data)
+  }, [setState])
 
   // Pull-to-refresh: sync from Gist if connected, otherwise a no-op
   const handleRefresh = useCallback(async () => {
@@ -45,6 +52,8 @@ export default function App() {
           folderStatus={folderStatus}
           onConnectFolder={connectFolder}
           onDisconnectFolder={disconnectFolder}
+          allState={state}
+          onImportState={handleImportState}
         />
       </PullToRefresh>
     )

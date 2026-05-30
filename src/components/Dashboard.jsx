@@ -4,6 +4,7 @@ import SyncModal from './SyncModal'
 import { createEmptyCollection } from '../data/baran'
 import { exportCollectionJSON } from '../utils'
 import { isSupported as fsSupportd } from '../fsStorage'
+import { idbSave } from '../idbStore'
 
 export default function Dashboard({
   collections,
@@ -19,6 +20,8 @@ export default function Dashboard({
   folderStatus,
   onConnectFolder,
   onDisconnectFolder,
+  allState,
+  onImportState,
 }) {
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName] = useState('')
@@ -27,7 +30,8 @@ export default function Dashboard({
   const [showSync, setShowSync] = useState(false)
   const [showFolderMenu, setShowFolderMenu] = useState(false)
   const [folderConnecting, setFolderConnecting] = useState(false)
-  const folderMenuRef = useRef(null)
+  const folderMenuRef  = useRef(null)
+  const importInputRef = useRef(null)
 
   useEffect(() => {
     if (!showFolderMenu) return
@@ -47,6 +51,32 @@ export default function Dashboard({
     setTagline('')
     setColor('#1a1a2e')
     setShowAdd(false)
+  }
+
+  function handleExportBackup() {
+    const blob = new Blob([JSON.stringify(allState)], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url
+    a.download = `atelier-backup-${new Date().toISOString().slice(0,10)}.json`
+    document.body.appendChild(a); a.click()
+    document.body.removeChild(a); URL.revokeObjectURL(url)
+    setShowFolderMenu(false)
+  }
+
+  function handleImportBackup(file) {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result)
+        if (data?.collections?.length > 0) {
+          onImportState(data)
+          setShowFolderMenu(false)
+        }
+      } catch { alert('Invalid backup file.') }
+    }
+    reader.readAsText(file)
   }
 
   async function handleConnectFolder() {
@@ -100,18 +130,36 @@ export default function Dashboard({
             {showFolderMenu && (
               <div className="folder-menu">
                 {!fsSupportd() ? (
-                  /* ── Not supported in this context ── */
+                  /* ── Not supported (iOS Safari / PWA) ── */
                   <>
                     <div className="folder-menu-name">
                       <span className="folder-menu-label">iCloud Storage</span>
-                      <span className="folder-menu-value" style={{ color: 'var(--text-muted)' }}>Unavailable here</span>
+                      <span className="folder-menu-value" style={{ color: 'var(--text-muted)' }}>iOS limitation</span>
                     </div>
                     <p className="folder-menu-desc">
-                      iCloud folder sync requires opening the app in <strong>Safari</strong> — not from your home screen icon.
+                      Apple doesn't allow web apps to access iCloud Drive folders on iPhone or iPad — this is an iOS restriction, not something we can work around.
                     </p>
-                    <p className="folder-menu-desc" style={{ marginTop: -4 }}>
-                      In Safari, tap <strong>Share → Add to Home Screen</strong> to keep a shortcut, but open once in Safari to set up the folder first.
+                    <p className="folder-menu-desc" style={{ marginTop: -2 }}>
+                      <strong style={{ color: 'var(--text)' }}>Good news:</strong> your data is now stored in IndexedDB — no more 5 MB limit. Storage is only limited by your device's free space.
                     </p>
+                    <p className="folder-menu-desc" style={{ marginTop: -2 }}>
+                      To move data between devices, use <strong style={{ color: 'var(--text)' }}>Export Backup</strong> below — save the file to iCloud Files and import it on your other device.
+                    </p>
+                    <input
+                      ref={importInputRef}
+                      type="file"
+                      accept=".json"
+                      style={{ display: 'none' }}
+                      onChange={e => { handleImportBackup(e.target.files[0]); e.target.value = '' }}
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="folder-menu-action" style={{ flex: 1 }} onClick={handleExportBackup}>
+                        ↓ Export Backup
+                      </button>
+                      <button className="folder-menu-action" style={{ flex: 1 }} onClick={() => importInputRef.current?.click()}>
+                        ↑ Import Backup
+                      </button>
+                    </div>
                     <button className="folder-menu-action" onClick={() => setShowFolderMenu(false)}>Got it</button>
                   </>
                 ) : folderHandle ? (
