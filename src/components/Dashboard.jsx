@@ -84,54 +84,70 @@ export default function Dashboard({
           <p className="logo-sub">by Mehdi</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* iCloud folder button — only shown when FSAPI is available */}
-          {fsSupportd() && (
-            <div style={{ position: 'relative' }} ref={folderMenuRef}>
-              <button
-                className={`folder-btn${folderHandle ? (folderStatus === 'error' ? ' folder-error' : ' folder-connected') : ''}`}
-                onClick={() => setShowFolderMenu(m => !m)}
-                title={folderTitle}
-                aria-label={folderTitle}
-              >
-                <svg width="18" height="16" viewBox="0 0 24 20" fill="currentColor">
-                  <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
-                </svg>
-                <span className="folder-btn-badge">{folderIcon}</span>
-              </button>
-              {showFolderMenu && (
-                <div className="folder-menu">
-                  {folderHandle ? (
-                    <>
-                      <div className="folder-menu-name">
-                        <span className="folder-menu-label">iCloud Folder</span>
-                        <span className="folder-menu-value">{folderName}</span>
-                      </div>
-                      <div className="folder-menu-status">
-                        {folderStatus === 'saving' && '↑ Saving to iCloud…'}
-                        {folderStatus === 'saved'  && '✓ All changes saved'}
-                        {folderStatus === 'error'  && '⚠ Save error — check folder access'}
-                        {folderStatus === 'loading' && '↓ Loading from iCloud…'}
-                      </div>
-                      <button className="folder-menu-action" onClick={() => { setShowFolderMenu(false); onDisconnectFolder() }}>
-                        Disconnect folder
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="folder-menu-name">
-                        <span className="folder-menu-label">iCloud Storage</span>
-                        <span className="folder-menu-value" style={{ color: 'var(--text-muted)' }}>Not connected</span>
-                      </div>
-                      <p className="folder-menu-desc">
-                        Pick a folder in iCloud Drive. All your designs, patterns, and
-                        sketches will be stored there and sync automatically across your
-                        iPhone, iPad, and Mac — no size limit.
-                      </p>
-                      <button
-                        className="folder-menu-action primary"
-                        onClick={handleConnectFolder}
-                        disabled={folderConnecting}
-                      >
+          {/* iCloud folder button — always visible, explains if unsupported */}
+          <div style={{ position: 'relative' }} ref={folderMenuRef}>
+            <button
+              className={`folder-btn${folderHandle ? (folderStatus === 'error' ? ' folder-error' : ' folder-connected') : ''}`}
+              onClick={() => setShowFolderMenu(m => !m)}
+              title={folderTitle}
+              aria-label={folderTitle}
+            >
+              <svg width="18" height="16" viewBox="0 0 24 20" fill="currentColor">
+                <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+              </svg>
+              <span className="folder-btn-badge">{folderIcon}</span>
+            </button>
+            {showFolderMenu && (
+              <div className="folder-menu">
+                {!fsSupportd() ? (
+                  /* ── Not supported in this context ── */
+                  <>
+                    <div className="folder-menu-name">
+                      <span className="folder-menu-label">iCloud Storage</span>
+                      <span className="folder-menu-value" style={{ color: 'var(--text-muted)' }}>Unavailable here</span>
+                    </div>
+                    <p className="folder-menu-desc">
+                      iCloud folder sync requires opening the app in <strong>Safari</strong> — not from your home screen icon.
+                    </p>
+                    <p className="folder-menu-desc" style={{ marginTop: -4 }}>
+                      In Safari, tap <strong>Share → Add to Home Screen</strong> to keep a shortcut, but open once in Safari to set up the folder first.
+                    </p>
+                    <button className="folder-menu-action" onClick={() => setShowFolderMenu(false)}>Got it</button>
+                  </>
+                ) : folderHandle ? (
+                  /* ── Connected ── */
+                  <>
+                    <div className="folder-menu-name">
+                      <span className="folder-menu-label">iCloud Folder</span>
+                      <span className="folder-menu-value">{folderName}</span>
+                    </div>
+                    <div className="folder-menu-status">
+                      {folderStatus === 'saving'  && '↑ Saving to iCloud…'}
+                      {folderStatus === 'saved'   && '✓ All changes saved'}
+                      {folderStatus === 'error'   && '⚠ Save error — check folder access'}
+                      {folderStatus === 'loading' && '↓ Loading from iCloud…'}
+                    </div>
+                    <button className="folder-menu-action" onClick={() => { setShowFolderMenu(false); onDisconnectFolder() }}>
+                      Disconnect folder
+                    </button>
+                  </>
+                ) : (
+                  /* ── Not connected ── */
+                  <>
+                    <div className="folder-menu-name">
+                      <span className="folder-menu-label">iCloud Storage</span>
+                      <span className="folder-menu-value" style={{ color: 'var(--text-muted)' }}>Not connected</span>
+                    </div>
+                    <p className="folder-menu-desc">
+                      Pick a folder in iCloud Drive. All your designs, patterns, and
+                      sketches will be stored there and sync automatically across your
+                      iPhone, iPad, and Mac — no size limit.
+                    </p>
+                    <button
+                      className="folder-menu-action primary"
+                      onClick={handleConnectFolder}
+                      disabled={folderConnecting}
+                    >
                         {folderConnecting ? 'Opening folder picker…' : 'Choose iCloud folder'}
                       </button>
                     </>
@@ -139,7 +155,6 @@ export default function Dashboard({
                 </div>
               )}
             </div>
-          )}
           <button
             className={cloudClass}
             onClick={() => setShowSync(true)}
