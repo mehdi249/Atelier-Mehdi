@@ -2607,8 +2607,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  overflow: hidden;
+  /* Show ~2 thumbnails, scroll for more */
+  max-height: 340px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.tp-piece-card-left::-webkit-scrollbar { display: none; }
 .tp-piece-card-left-empty {
   display: flex;
   align-items: center;
