@@ -295,6 +295,11 @@ function PieceCard({ piece, isSelected, onClick }) {
       <div className="tp-piece-footer">
         <span className="tp-piece-name">{piece.name}</span>
         {piece.styleCode && <span className="tp-piece-code">{piece.styleCode}</span>}
+        {(piece.category || piece.season) && (
+          <span className="tp-piece-meta">
+            {[piece.category, piece.season].filter(Boolean).join(' · ')}
+          </span>
+        )}
       </div>
     </div>
   )
