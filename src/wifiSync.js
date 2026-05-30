@@ -56,16 +56,21 @@ function fingerprint(dataUrl) {
 function serverBase(ip) { return `https://${ip}:4321` }
 
 // ── Ping ──────────────────────────────────────────────────────────────────────
+// Returns { ok: true } or { ok: false, error: string }
 export async function pingServer(ip) {
   try {
     const ctrl = new AbortController()
     const t = setTimeout(() => ctrl.abort(), PING_TIMEOUT)
     const res = await fetch(`${serverBase(ip)}/ping`, { signal: ctrl.signal })
     clearTimeout(t)
-    if (!res.ok) return false
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
     const json = await res.json()
-    return json?.server === 'atelier-mehdi'
-  } catch { return false }
+    if (json?.server === 'atelier-mehdi') return { ok: true }
+    return { ok: false, error: 'Wrong server identity' }
+  } catch (e) {
+    if (e?.name === 'AbortError') return { ok: false, error: 'Timed out (3s)' }
+    return { ok: false, error: `${e?.name}: ${e?.message}` }
+  }
 }
 
 // ── Serialise: walk state, upload large blobs, return lean JSON ───────────────

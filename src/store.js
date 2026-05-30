@@ -91,7 +91,7 @@ export function useStore() {
   useEffect(() => {
     const ip = loadServerIP()
     if (!ip) return
-    pingServer(ip).then(async ok => {
+    pingServer(ip).then(async ({ ok }) => {
       reachableRef.current = ok
       setServerReachable(ok)
       if (!ok) return
@@ -152,8 +152,8 @@ export function useStore() {
   // ── WiFi callbacks ────────────────────────────────────────────────────────
 
   const connectServer = useCallback(async (ip) => {
-    const ok = await pingServer(ip)
-    if (!ok) throw new Error(`Server not reachable at ${ip}`)
+    const { ok, error } = await pingServer(ip)
+    if (!ok) throw new Error(error || `Server not reachable at ${ip}`)
     saveServerIP(ip)
     setServerIP(ip)
     serverIPRef.current  = ip
