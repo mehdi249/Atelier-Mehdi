@@ -371,11 +371,15 @@ function PatternCard({ piece, pieceNum, activeVersionId, onSelectVersion, onClic
 
 // ── DETAIL PANEL ─────────────────────────────────────────────────────────────
 
-function PatternDetailPanel({ piece, pieceNum, activeVersionId, onUpdate, onDelete, onClose }) {
+function PatternDetailPanel({ piece, pieceNum, activeVersionId, onActiveVersion, onUpdate, onDelete, onClose }) {
   const [pageIdx,      setPageIdx]      = useState(0)
   const [addLoading,   setAddLoading]   = useState(false)
   const [addMenuOpen,  setAddMenuOpen]  = useState(false)
   const [addAccept,    setAddAccept]    = useState('')
+  const [editMode,     setEditMode]     = useState(false)
+  // editMode state: local copy of versions for reorder/rename
+  const [editVersions, setEditVersions] = useState([])
+  const [dragIdx,      setDragIdx]      = useState(null)
   const inputRef   = useRef(null)
   const addMenuRef = useRef(null)
 
@@ -391,6 +395,35 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onUpdate, onDele
     setAddMenuOpen(false)
     setTimeout(() => inputRef.current?.click(), 30)
   }
+
+  function enterEdit() {
+    setEditVersions(piece.versions.map(v => ({ ...v })))
+    setEditMode(true)
+  }
+
+  function saveEdit() {
+    // Renumber versions sequentially based on new order
+    const renumbered = editVersions.map((v, i) => ({ ...v, versionNum: i + 1 }))
+    onUpdate({ ...piece, versions: renumbered })
+    setEditMode(false)
+  }
+
+  function updateEditNote(id, note) {
+    setEditVersions(vs => vs.map(v => v.id === id ? { ...v, note } : v))
+  }
+
+  // Drag-to-reorder via mouse and touch
+  function handleDragStart(i)  { setDragIdx(i) }
+  function handleDragOver(e, i) {
+    e.preventDefault()
+    if (dragIdx === null || dragIdx === i) return
+    const next = [...editVersions]
+    const [moved] = next.splice(dragIdx, 1)
+    next.splice(i, 0, moved)
+    setEditVersions(next)
+    setDragIdx(i)
+  }
+  function handleDragEnd() { setDragIdx(null) }
 
   const activeVer = piece.versions.find(v => v.id === activeVersionId) ?? piece.versions[0]
   const pages     = activeVer?.pages ?? []
@@ -584,27 +617,68 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onUpdate, onDele
 
           {/* Versions list */}
           <div className="tp-detail-section">
-            <div className="tp-section-label">Versions</div>
-            <div className="pt-ver-list">
-              {piece.versions.map(v => (
-                <div key={v.id} className={`pt-ver-row${v.id === activeVersionId ? ' active' : ''}`}>
-                  <div className="pt-ver-row-thumb">
-                    {v.src
-                      ? <img src={v.src} alt="" />
-                      : v.nativeName
-                        ? <span style={{ fontSize: 14 }}>⬢</span>
-                        : null}
-                  </div>
-                  <span className="pt-ver-row-num">v{v.versionNum}</span>
-                  <span className="pt-ver-row-note">
-                    {v.note || v.nativeName || (v.fileCategory === 'dxf' ? 'DXF pattern' : `${v.fileCategory ?? ''} file`)}
-                  </span>
-                  {v.id === piece.coverVersionId && (
-                    <span className="pt-ver-row-cover">COVER</span>
-                  )}
-                </div>
-              ))}
+            <div className="pt-ver-section-header">
+              <span className="tp-section-label">Versions</span>
+              {!editMode
+                ? <button className="pt-ver-edit-btn" onClick={enterEdit}>Edit</button>
+                : <button className="pt-ver-edit-btn gold" onClick={saveEdit}>Done</button>
+              }
             </div>
+
+            {editMode ? (
+              /* ── Edit mode: draggable + renameable ── */
+              <div className="pt-ver-list">
+                {editVersions.map((v, i) => (
+                  <div
+                    key={v.id}
+                    className={`pt-ver-row pt-ver-row-edit${dragIdx === i ? ' dragging' : ''}`}
+                    draggable
+                    onDragStart={() => handleDragStart(i)}
+                    onDragOver={e => handleDragOver(e, i)}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <span className="pt-ver-drag-handle">⠿</span>
+                    <div className="pt-ver-row-thumb">
+                      {v.src ? <img src={v.src} alt="" /> : v.nativeName ? <span style={{ fontSize: 14 }}>⬢</span> : null}
+                    </div>
+                    <span className="pt-ver-row-num">v{i + 1}</span>
+                    <input
+                      className="pt-ver-name-input"
+                      value={v.note}
+                      placeholder="Version name…"
+                      onChange={e => updateEditNote(v.id, e.target.value)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* ── Normal mode: tap to switch preview ── */
+              <div className="pt-ver-list">
+                {piece.versions.map(v => (
+                  <div
+                    key={v.id}
+                    className={`pt-ver-row${v.id === activeVersionId ? ' active' : ''}`}
+                    onClick={() => onActiveVersion(v.id)}
+                  >
+                    <div className="pt-ver-row-thumb">
+                      {v.src
+                        ? <img src={v.src} alt="" />
+                        : v.nativeName
+                          ? <span style={{ fontSize: 14 }}>⬢</span>
+                          : null}
+                    </div>
+                    <span className="pt-ver-row-num">v{v.versionNum}</span>
+                    <span className="pt-ver-row-note">
+                      {v.note || v.nativeName || (v.fileCategory === 'dxf' ? 'DXF pattern' : `${v.fileCategory ?? ''} file`)}
+                    </span>
+                    {v.id === piece.coverVersionId && (
+                      <span className="pt-ver-row-cover">COVER</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <input ref={inputRef} type="file" multiple
               accept={addAccept}
               style={{ display: 'none' }}
@@ -699,6 +773,7 @@ export default function Patterns({ data, onChange }) {
           piece={selectedPiece}
           pieceNum={pieces.indexOf(selectedPiece) + 1}
           activeVersionId={selectedVersionId}
+          onActiveVersion={verId => setSelectedVersionId(verId)}
           onUpdate={p => updatePiece(selectedPiece.id, p)}
           onDelete={() => deletePiece(selectedPiece.id)}
           onClose={() => { setSelectedPieceId(null); setSelectedVersionId(null) }}
