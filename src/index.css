@@ -3215,6 +3215,23 @@ body {
   box-sizing: border-box;
   width: calc(100% - 20px);
 }
+/* Small overlay chip shown on extracted native previews */
+.pt-native-chip {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text);
+  background: rgba(0,0,0,0.65);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 5px;
+  padding: 2px 6px;
+  z-index: 4;
+  backdrop-filter: blur(4px);
+}
+
 .pt-native-icon {
   font-size: 32px;
   color: var(--text-dim);

@@ -10,12 +10,91 @@ const STAGES = [
 ]
 
 const ADD_OPTIONS = [
-  { key: 'pdf',   label: 'Import PDF / AI / SVG', accept: '.pdf,.ai,.svg' },
-  { key: 'dxf',   label: 'Import DXF',            accept: '.dxf' },
-  { key: 'clo3d', label: 'Import CLO3D (.zprj)',   accept: '.zprj' },
-  { key: 'opf',   label: 'Import Optitex (.opf)',  accept: '.opf' },
-  { key: 'image', label: 'Import Image',           accept: 'image/*' },
+  { key: 'pdf',   label: 'Import PDF / AI / SVG',      accept: '.pdf,.ai,.svg' },
+  { key: 'dxf',   label: 'Import DXF',                 accept: '.dxf' },
+  { key: 'clo3d', label: 'Import CLO3D (.zprj)',        accept: '.zprj' },
+  { key: 'opf',   label: 'Import Optitex (.pds / .opf)', accept: '.pds,.opf' },
+  { key: 'image', label: 'Import Image',               accept: 'image/*' },
 ]
+
+// ── NATIVE FILE PREVIEW EXTRACTION ───────────────────────────────────────────
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload  = () => resolve(r.result)
+    r.onerror = reject
+    r.readAsDataURL(blob)
+  })
+}
+
+async function extractZprjPreview(file) {
+  try {
+    const { unzipSync } = await import('fflate')
+    const buffer  = await file.arrayBuffer()
+    const entries = unzipSync(new Uint8Array(buffer))
+    const keys    = Object.keys(entries)
+
+    // CLO3D stores renders in gallery/, thumbnails/, or icon/ folders
+    const ranked = [
+      ...keys.filter(k => /\.(png|jpe?g)$/i.test(k) && /gallery|thumb|preview/i.test(k)),
+      ...keys.filter(k => /\.(png|jpe?g)$/i.test(k)),
+    ]
+    const key = ranked[0]
+    if (!key) return null
+
+    const mime = /\.png$/i.test(key) ? 'image/png' : 'image/jpeg'
+    return await blobToDataUrl(new Blob([entries[key]], { type: mime }))
+  } catch (e) {
+    console.warn('ZPRJ preview extraction failed:', e)
+    return null
+  }
+}
+
+async function extractOptitexPreview(file) {
+  try {
+    const buffer = await file.arrayBuffer()
+    const bytes  = new Uint8Array(buffer)
+
+    // Some newer PDS/OPF are ZIP-based — try that first
+    if (bytes[0] === 0x50 && bytes[1] === 0x4B) {
+      const { unzipSync } = await import('fflate')
+      const entries = unzipSync(bytes)
+      const key = Object.keys(entries).find(k => /\.(png|jpe?g)$/i.test(k))
+      if (key) {
+        const mime = /\.png$/i.test(key) ? 'image/png' : 'image/jpeg'
+        return await blobToDataUrl(new Blob([entries[key]], { type: mime }))
+      }
+    }
+
+    // Scan binary for embedded PNG (89 50 4E 47 … 49 45 4E 44 AE 42 60 82)
+    const PNG_SIG  = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    const PNG_IEND = [0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]
+    for (let i = 0; i < bytes.length - 8; i++) {
+      if (PNG_SIG.every((b, j) => bytes[i + j] === b)) {
+        for (let j = i + 8; j <= bytes.length - 8; j++) {
+          if (PNG_IEND.every((b, k) => bytes[j + k] === b)) {
+            return await blobToDataUrl(new Blob([bytes.slice(i, j + 8)], { type: 'image/png' }))
+          }
+        }
+      }
+    }
+
+    // Scan for embedded JPEG (FF D8 FF … FF D9)
+    for (let i = 0; i < bytes.length - 4; i++) {
+      if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8 && bytes[i + 2] === 0xFF) {
+        for (let j = i + 4; j < bytes.length - 1; j++) {
+          if (bytes[j] === 0xFF && bytes[j + 1] === 0xD9) {
+            return await blobToDataUrl(new Blob([bytes.slice(i, j + 2)], { type: 'image/jpeg' }))
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Optitex preview extraction failed:', e)
+  }
+  return null
+}
 
 function createVersion(num) {
   return {
@@ -49,8 +128,28 @@ function createPiece(name = 'Pattern Piece') {
 async function processFile(file, versionNum) {
   const ext = file.name.split('.').pop().toLowerCase()
 
-  if (ext === 'zprj' || ext === 'opf') {
-    return { ...createVersion(versionNum), fileCategory: ext, nativeName: file.name }
+  if (ext === 'zprj') {
+    const previewSrc = await extractZprjPreview(file)
+    return {
+      ...createVersion(versionNum),
+      fileCategory: 'zprj',
+      nativeName: file.name,
+      src: previewSrc,
+      pages: previewSrc ? [previewSrc] : [],
+      pageCount: previewSrc ? 1 : 0,
+    }
+  }
+
+  if (ext === 'pds' || ext === 'opf') {
+    const previewSrc = await extractOptitexPreview(file)
+    return {
+      ...createVersion(versionNum),
+      fileCategory: ext,
+      nativeName: file.name,
+      src: previewSrc,
+      pages: previewSrc ? [previewSrc] : [],
+      pageCount: previewSrc ? 1 : 0,
+    }
   }
 
   if (ext === 'dxf') {
@@ -137,18 +236,29 @@ function AddPatternMenu({ onAdd }) {
 
 // ── NATIVE FILE BADGE ────────────────────────────────────────────────────────
 
+function nativeAppLabel(ext) {
+  if (ext === 'zprj') return 'Open in CLO3D'
+  if (ext === 'pds' || ext === 'opf') return 'Open in Optitex'
+  return 'Native file'
+}
+
 function NativeBadge({ filename }) {
-  const ext   = filename?.split('.').pop()?.toLowerCase()
-  const label = ext === 'zprj' ? 'Open in CLO3D' : ext === 'opf' ? 'Open in Optitex' : 'Native file'
+  const ext = filename?.split('.').pop()?.toLowerCase()
   return (
     <div className="pt-native-badge">
       <span className="pt-native-icon">⬢</span>
       <div className="pt-native-text">
-        <span className="pt-native-label">Native file — {label}</span>
+        <span className="pt-native-label">Native file — {nativeAppLabel(ext)}</span>
         <span className="pt-native-name">{filename}</span>
       </div>
     </div>
   )
+}
+
+// Small overlay chip shown on top of an extracted preview image
+function NativeChip({ filename }) {
+  const ext = filename?.split('.').pop()?.toUpperCase()
+  return <span className="pt-native-chip">{ext}</span>
 }
 
 // ── VERSION THUMBNAIL ────────────────────────────────────────────────────────
@@ -214,18 +324,20 @@ function PatternCard({ piece, pieceNum, activeVersionId, onSelectVersion, onClic
         </div>
 
         {/* Right: cover preview */}
-        <div className="tp-piece-card-right">
-          {coverVer?.src
-            ? <img src={coverVer.src} alt={piece.name} className="tp-piece-card-sketch" />
-            : coverVer?.nativeName
-              ? <NativeBadge filename={coverVer.nativeName} />
-              : (
-                <div className="tp-piece-cover-empty">
-                  <span className="tp-piece-cover-plus">+</span>
-                  <span className="tp-piece-cover-hint">Upload pattern</span>
-                </div>
-              )
-          }
+        <div className="tp-piece-card-right" style={{ position: 'relative' }}>
+          {coverVer?.src ? (
+            <>
+              <img src={coverVer.src} alt={piece.name} className="tp-piece-card-sketch" />
+              {coverVer.nativeName && <NativeChip filename={coverVer.nativeName} />}
+            </>
+          ) : coverVer?.nativeName ? (
+            <NativeBadge filename={coverVer.nativeName} />
+          ) : (
+            <div className="tp-piece-cover-empty">
+              <span className="tp-piece-cover-plus">+</span>
+              <span className="tp-piece-cover-hint">Upload pattern</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -312,7 +424,7 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onUpdate, onDele
           style={{ minHeight: 240 }}
           onClick={(!activeVer?.src && !activeVer?.nativeName && pages.length === 0) ? () => inputRef.current?.click() : undefined}
         >
-          {activeVer?.nativeName ? (
+          {activeVer?.nativeName && !activeVer?.src ? (
             <NativeBadge filename={activeVer.nativeName} />
           ) : activeVer?.src || pages.length ? (
             <>
@@ -324,6 +436,7 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onUpdate, onDele
                 alt={piece.name}
                 className="tp-sketch-panel-img"
               />
+              {activeVer.nativeName && <NativeChip filename={activeVer.nativeName} />}
               {hasPages && pageIdx > 0 && (
                 <button className="tp-sketch-panel-arrow tp-sketch-panel-prev" onClick={() => setPageIdx(i => i - 1)}>‹</button>
               )}
