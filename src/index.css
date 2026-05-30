@@ -2516,14 +2516,14 @@ body {
   min-height: 0;
 }
 
-/* Grid — single column landscape list */
+/* Grid — single column, tall portrait cards */
 .tp-grid {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
 
-/* Piece card — horizontal landscape */
+/* Piece card — vertical, image-first */
 .tp-piece-card {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -2531,19 +2531,17 @@ body {
   overflow: hidden;
   cursor: pointer;
   display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  transition: box-shadow 0.15s, border-color 0.15s;
+  flex-direction: column;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
 }
-.tp-piece-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.5); border-color: var(--border-light); }
+.tp-piece-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.55); transform: translateY(-2px); }
 .tp-piece-card.selected { box-shadow: 0 0 0 2px var(--accent), 0 4px 18px rgba(0,0,0,0.45); border-color: var(--accent); }
 .tp-piece-card.complete { border-color: rgba(201,169,110,0.38); }
 
-/* Left image block */
+/* Cover image — tall portrait ratio */
 .tp-piece-cover {
-  width: 200px;
-  min-height: 140px;
-  flex-shrink: 0;
+  aspect-ratio: 3/4;
+  width: 100%;
   background: var(--surface-3);
   position: relative;
   overflow: hidden;
@@ -2553,20 +2551,20 @@ body {
 /* Empty cover — dashed upload zone */
 .tp-piece-cover-empty {
   position: absolute;
-  inset: 6px;
+  inset: 10px;
   border: 1.5px dashed var(--border-light);
   border-radius: var(--radius-sm);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   transition: border-color 0.15s;
 }
 .tp-piece-card:hover .tp-piece-cover-empty { border-color: rgba(201,169,110,0.5); }
 
 .tp-piece-cover-plus {
-  font-size: 22px;
+  font-size: 32px;
   color: var(--text-dim);
   font-weight: 200;
   line-height: 1;
@@ -2574,19 +2572,19 @@ body {
 .tp-piece-card:hover .tp-piece-cover-plus { color: var(--text-muted); }
 
 .tp-piece-cover-hint {
-  font-size: 7px;
+  font-size: 9px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
 
-/* Completion dot */
+/* Completion dot — overlaid top-right of cover */
 .tp-piece-dot {
   position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 9px;
-  height: 9px;
+  top: 10px;
+  right: 10px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--surface-3);
   border: 1.5px solid var(--border-light);
@@ -2599,29 +2597,26 @@ body {
   box-shadow: 0 0 8px rgba(201,169,110,0.45);
 }
 
-/* Page count badge on grid card */
+/* Page count badge — bottom-left of cover */
 .tp-piece-pages {
   position: absolute;
-  bottom: 6px; left: 6px;
-  font-size: 7px; font-weight: 600;
-  color: rgba(255,255,255,0.82);
-  background: rgba(0,0,0,0.5);
+  bottom: 10px; left: 10px;
+  font-size: 9px; font-weight: 600;
+  color: rgba(255,255,255,0.88);
+  background: rgba(0,0,0,0.55);
   border-radius: 8px;
-  padding: 2px 5px;
+  padding: 3px 7px;
   letter-spacing: 0.04em;
   z-index: 2;
   white-space: nowrap;
 }
 
-/* Right info block */
+/* Footer below image */
 .tp-piece-footer {
-  flex: 1;
-  padding: 14px 14px 12px;
+  padding: 10px 12px 11px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 3px;
-  min-width: 0;
 }
 .tp-piece-name {
   font-size: 12px;
@@ -2640,7 +2635,6 @@ body {
 .tp-piece-meta {
   font-size: 9px;
   color: var(--text-muted);
-  margin-top: 2px;
 }
 
 /* ── Detail panel (right / bottom-sheet) ── */
@@ -3023,8 +3017,7 @@ body {
 /* Responsive */
 @media (max-width: 640px) {
   .tp-body { padding: 14px; }
-  .tp-grid { gap: 8px; }
-  .tp-piece-cover { width: 140px; min-height: 110px; }
+  .tp-grid { gap: 10px; }
   .tp-detail {
     width: 100%;
     height: 90%;
