@@ -4,7 +4,8 @@ import express from 'express'
 import cors from 'cors'
 import multer from 'multer'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import { homedir, networkInterfaces } from 'os'
 
 const PORT      = 4321
@@ -21,6 +22,9 @@ const CERT_FILE = process.env.ATELIER_CERT || ''
 const KEY_FILE  = process.env.ATELIER_KEY  || ''
 const CA_FILE   = process.env.ATELIER_CA   || ''
 const HOSTNAME  = process.env.ATELIER_HOSTNAME || 'your-mac.local'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const DIST_DIR  = join(__dirname, '..', 'dist')
 
 const app = express()
 app.use(cors())
@@ -75,29 +79,48 @@ app.get('/files/:filename', (req, res) => {
   res.sendFile(filepath)
 })
 
+// ── Serve the built Atelier app (same-origin — avoids iOS PWA cert issues) ────
+// When the app runs from https://[mac-ip]:4321/Atelier-Mehdi/ all fetch() calls
+// are same-origin so no cross-origin HTTPS certificate trust is required.
+if (existsSync(DIST_DIR)) {
+  app.use('/Atelier-Mehdi', express.static(DIST_DIR))
+  app.get(['/Atelier-Mehdi', '/Atelier-Mehdi/*'],
+    (_req, res) => res.sendFile(join(DIST_DIR, 'index.html')))
+}
+
 // ── Startup banner ────────────────────────────────────────────────────────────
 function printStartup() {
   const nets = networkInterfaces()
   let ip = '127.0.0.1'
   for (const name of Object.keys(nets)) {
     for (const net of nets[name]) {
-      if (net.family === 'IPv4' && !net.internal) { ip = net.address; break }
+      // Skip link-local / APIPA (169.254.x.x) — prefer real Wi-Fi addresses
+      if (net.family !== 'IPv4' || net.internal || net.address.startsWith('169.254.')) continue
+      ip = net.address
+      break
     }
   }
 
-  const proto = (CERT_FILE && existsSync(CERT_FILE)) ? 'https' : 'http'
+  const proto   = (CERT_FILE && existsSync(CERT_FILE)) ? 'https' : 'http'
+  const hasApp  = existsSync(DIST_DIR)
+
   console.log(`\nAtelier sync server — port ${PORT} (${proto.toUpperCase()})`)
   console.log(`Data: ${BASE_DIR}\n`)
-  console.log(`  Enter in app → ${ip}  or  ${HOSTNAME}`)
+
+  if (hasApp) {
+    console.log(`  ── Open in iPhone Safari → Add to Home Screen ───────────`)
+    console.log(`  ${proto}://${ip}:${PORT}/Atelier-Mehdi/`)
+    console.log(`  ${proto}://${HOSTNAME}:${PORT}/Atelier-Mehdi/`)
+    console.log(`  ─────────────────────────────────────────────────────────\n`)
+  } else {
+    console.log(`  Enter in app → ${ip}  or  ${HOSTNAME}\n`)
+  }
 
   if (proto === 'https') {
-    console.log(`\n  ── First time on a new iPhone/iPad ──────────────────────`)
-    console.log(`  1. Open Safari → http://${HOSTNAME}:${PORT_HTTP}/install-cert`)
-    console.log(`     (tap Allow to download the certificate file)`)
+    console.log(`  ── First time on a new iPhone/iPad ──────────────────────`)
+    console.log(`  1. Safari → http://${HOSTNAME}:${PORT_HTTP}/install-cert`)
     console.log(`  2. Settings → General → VPN & Device Management → install`)
-    console.log(`  3. Settings → General → About → Certificate Trust Settings`)
-    console.log(`     → toggle "Atelier Local CA" to ON`)
-    console.log(`  4. Open Atelier app → Wi-Fi icon → enter ${ip} → Connect`)
+    console.log(`  3. Settings → General → About → Certificate Trust → ON`)
     console.log(`  ─────────────────────────────────────────────────────────\n`)
   }
 }

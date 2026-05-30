@@ -19,6 +19,11 @@ import {
 
 const LS_KEY = 'atelier-mehdi-v1'
 
+// When the app is served directly from the Mac server (port 4321) all fetch()
+// calls are same-origin, bypassing iOS PWA cross-origin certificate restrictions.
+const LOCAL_SERVER_IP = typeof window !== 'undefined' && window.location.port === '4321'
+  ? window.location.hostname : null
+
 // Synchronous seed: read localStorage so the first render is instant.
 // IndexedDB (async) is loaded after mount and replaces this if it has data.
 function seedState() {
@@ -35,7 +40,7 @@ function seedState() {
 export function useStore() {
   const [state, setState]                     = useState(seedState)
   const [wifiSyncStatus, setWifiSyncStatus]   = useState('idle')
-  const [serverIP, setServerIP]               = useState(loadServerIP)
+  const [serverIP, setServerIP]               = useState(() => LOCAL_SERVER_IP || loadServerIP())
   const [serverReachable, setServerReachable] = useState(false)
   const [folderHandle, setFolderHandle]       = useState(null)
   const [folderStatus, setFolderStatus]       = useState('idle')
@@ -89,8 +94,12 @@ export function useStore() {
 
   // ── On mount: ping server, pull if reachable ──────────────────────────────
   useEffect(() => {
-    const ip = loadServerIP()
+    const ip = LOCAL_SERVER_IP || loadServerIP()
     if (!ip) return
+    if (LOCAL_SERVER_IP) {
+      saveServerIP(LOCAL_SERVER_IP)
+      serverIPRef.current = LOCAL_SERVER_IP
+    }
     pingServer(ip).then(async ({ ok }) => {
       reachableRef.current = ok
       setServerReachable(ok)

@@ -8,6 +8,16 @@ if [ ! -d "node_modules" ]; then
   npm install
 fi
 
+# ── Build the Atelier app for local serving (first run only) ─────────────────
+if [ ! -d "../dist" ]; then
+  echo "Building Atelier app…"
+  (
+    cd ..
+    [ ! -d "node_modules" ] && npm install
+    npm run build
+  )
+fi
+
 # ── mkcert ────────────────────────────────────────────────────────────────────
 if ! command -v mkcert &>/dev/null; then
   echo "Installing mkcert for HTTPS support…"
