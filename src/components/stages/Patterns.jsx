@@ -28,37 +28,88 @@ function blobToDataUrl(blob) {
   })
 }
 
-// Scan raw bytes for the first embedded PNG or JPEG — works when ZIP entries
-// are stored uncompressed (method 0), which is common for already-compressed images.
+// Validate that a data-url actually decodes as an image
+function validateDataUrl(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.onload  = () => resolve(dataUrl)
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  })
+}
+
+// Comprehensive raw-byte scanner — finds the largest valid PNG, JPEG, or BMP
+// embedded anywhere in the binary (works for uncompressed ZIP entries and many
+// proprietary binary formats that embed a thumbnail).
 async function scanForEmbeddedImage(bytes) {
-  // PNG: 89 50 4E 47 0D 0A 1A 0A  →  IEND chunk: 49 45 4E 44 AE 42 60 82
   const PNG_SIG  = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
   const PNG_IEND = [0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]
+  const candidates = [] // { data, size, type }
+
+  // ── PNG ──────────────────────────────────────────────────────────────────
   for (let i = 0; i < bytes.length - 8; i++) {
     if (PNG_SIG.every((b, j) => bytes[i + j] === b)) {
       for (let j = i + 8; j <= bytes.length - 8; j++) {
         if (PNG_IEND.every((b, k) => bytes[j + k] === b)) {
-          try {
-            return await blobToDataUrl(new Blob([bytes.slice(i, j + 8)], { type: 'image/png' }))
-          } catch (_) { break }
+          const slice = bytes.slice(i, j + 8)
+          if (slice.length > 256) candidates.push({ data: slice, type: 'image/png', size: slice.length })
+          break
         }
       }
     }
   }
-  // JPEG: FF D8 FF  →  end marker FF D9
+
+  // ── JPEG — search for the LARGEST block, not just first ─────────────────
+  // For each JPEG start, scan backwards from end of file for the last EOI marker.
+  // This avoids cutting off at a false FF D9 inside compressed image data.
   for (let i = 0; i < bytes.length - 4; i++) {
     if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8 && bytes[i + 2] === 0xFF) {
-      for (let j = i + 4; j < bytes.length - 1; j++) {
+      // Scan backwards from end of file for FF D9
+      for (let j = bytes.length - 2; j > i + 512; j--) {
         if (bytes[j] === 0xFF && bytes[j + 1] === 0xD9) {
-          try {
-            return await blobToDataUrl(new Blob([bytes.slice(i, j + 2)], { type: 'image/jpeg' }))
-          } catch (_) { break }
+          const slice = bytes.slice(i, j + 2)
+          if (slice.length > 512) candidates.push({ data: slice, type: 'image/jpeg', size: slice.length })
+          break
         }
       }
+      // Only try the first JPEG start — if largest JPEG fails we'll know
+      break
     }
+  }
+
+  // ── BMP — header "BM" with embedded 4-byte file size ────────────────────
+  for (let i = 0; i < bytes.length - 54; i++) {
+    if (bytes[i] === 0x42 && bytes[i + 1] === 0x4D) {
+      const sz = bytes[i+2] | (bytes[i+3] << 8) | (bytes[i+4] << 16) | (bytes[i+5] << 24)
+      if (sz > 1024 && sz < 40 * 1024 * 1024 && i + sz <= bytes.length) {
+        candidates.push({ data: bytes.slice(i, i + sz), type: 'image/bmp', size: sz })
+      }
+    }
+  }
+
+  // ── WebP — RIFF....WEBP ──────────────────────────────────────────────────
+  for (let i = 0; i < bytes.length - 12; i++) {
+    if (bytes[i] === 0x52 && bytes[i+1] === 0x49 && bytes[i+2] === 0x46 && bytes[i+3] === 0x46 &&
+        bytes[i+8] === 0x57 && bytes[i+9] === 0x45 && bytes[i+10] === 0x42 && bytes[i+11] === 0x50) {
+      const sz = 12 + (bytes[i+4] | (bytes[i+5]<<8) | (bytes[i+6]<<16) | (bytes[i+7]<<24))
+      if (sz > 256 && i + sz <= bytes.length) {
+        candidates.push({ data: bytes.slice(i, i + sz), type: 'image/webp', size: sz })
+      }
+    }
+  }
+
+  // Try candidates largest-first; return first that validates as a real image
+  candidates.sort((a, b) => b.size - a.size)
+  for (const c of candidates) {
+    try {
+      const dataUrl = await blobToDataUrl(new Blob([c.data], { type: c.type }))
+      const valid   = await validateDataUrl(dataUrl)
+      if (valid) return valid
+    } catch (_) {}
   }
   return null
 }
+
 
 async function extractZprjPreview(file) {
   const buffer = await file.arrayBuffer()
@@ -380,8 +431,9 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onActiveVersion,
   // editMode state: local copy of versions for reorder/rename
   const [editVersions, setEditVersions] = useState([])
   const [dragIdx,      setDragIdx]      = useState(null)
-  const inputRef   = useRef(null)
-  const addMenuRef = useRef(null)
+  const inputRef      = useRef(null)
+  const previewImgRef = useRef(null)
+  const addMenuRef    = useRef(null)
 
   useEffect(() => {
     if (!addMenuOpen) return
@@ -452,6 +504,12 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onActiveVersion,
     setAddLoading(false)
   }
 
+  async function addPreviewImage(file) {
+    if (!file || !activeVer) return
+    const src = await compressImage(file)
+    setVer(activeVer.id, { src, pages: [src], pageCount: 1 })
+  }
+
   function setCover() {
     if (!activeVer) return
     const coverSrc = hasPages ? pages[pageIdx] : activeVer.src
@@ -499,7 +557,23 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onActiveVersion,
           onClick={(!activeVer?.src && !activeVer?.nativeName && pages.length === 0) ? () => inputRef.current?.click() : undefined}
         >
           {activeVer?.nativeName && !activeVer?.src ? (
-            <NativeBadge filename={activeVer.nativeName} />
+            <>
+              <NativeBadge filename={activeVer.nativeName} />
+              <input
+                ref={previewImgRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={e => { addPreviewImage(e.target.files[0]); e.target.value = '' }}
+              />
+              <button
+                className="btn-ghost-sm"
+                style={{ marginTop: 12, fontSize: 11 }}
+                onClick={() => previewImgRef.current?.click()}
+              >
+                + Add preview image
+              </button>
+            </>
           ) : activeVer?.src || pages.length ? (
             <>
               {hasPages && (
