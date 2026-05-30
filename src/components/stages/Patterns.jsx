@@ -590,7 +590,7 @@ function PatternDetailPanel({ piece, pieceNum, activeVersionId, onUpdate, onDele
               ))}
             </div>
             <input ref={inputRef} type="file" multiple
-              accept=".pdf,.ai,.svg,.dxf,.zprj,.opf,image/*"
+              accept=".pdf,.ai,.svg,.dxf,.zprj,.pds,.opf,image/*"
               style={{ display: 'none' }}
               onChange={e => { addVersion(e.target.files); e.target.value = '' }}
             />
