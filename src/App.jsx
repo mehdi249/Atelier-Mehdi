@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react'
 import { useStore } from './store'
-import { idbSave } from './idbStore'
 import Dashboard from './components/Dashboard'
 import ProjectView from './components/ProjectView'
 import PullToRefresh from './components/PullToRefresh'
@@ -8,16 +7,16 @@ import PullToRefresh from './components/PullToRefresh'
 export default function App() {
   const {
     state,
-    setState,
     updateCollection,
     updateStage,
     addCollection,
     deleteCollection,
-    syncStatus,
-    syncConfig,
-    connectGist,
-    pullFromGist,
-    disconnectGist,
+    serverIP,
+    serverReachable,
+    wifiSyncStatus,
+    connectServer,
+    disconnectServer,
+    pullFromServerNow,
     folderHandle,
     folderStatus,
     connectFolder,
@@ -25,15 +24,9 @@ export default function App() {
   } = useStore()
   const [currentView, setCurrentView] = useState('dashboard')
 
-  const handleImportState = useCallback(async (data) => {
-    setState(data)
-    await idbSave(data)
-  }, [setState])
-
-  // Pull-to-refresh: sync from Gist if connected, otherwise a no-op
   const handleRefresh = useCallback(async () => {
-    if (syncConfig) await pullFromGist()
-  }, [syncConfig, pullFromGist])
+    if (serverReachable) await pullFromServerNow()
+  }, [serverReachable, pullFromServerNow])
 
   if (currentView === 'dashboard') {
     return (
@@ -43,17 +36,16 @@ export default function App() {
           onOpen={setCurrentView}
           onAdd={addCollection}
           onDelete={deleteCollection}
-          syncStatus={syncStatus}
-          syncConfig={syncConfig}
-          onConnectGist={connectGist}
-          onPullFromGist={pullFromGist}
-          onDisconnectGist={disconnectGist}
+          serverIP={serverIP}
+          serverReachable={serverReachable}
+          wifiSyncStatus={wifiSyncStatus}
+          onConnectServer={connectServer}
+          onPullFromServer={pullFromServerNow}
+          onDisconnectServer={disconnectServer}
           folderHandle={folderHandle}
           folderStatus={folderStatus}
           onConnectFolder={connectFolder}
           onDisconnectFolder={disconnectFolder}
-          allState={state}
-          onImportState={handleImportState}
         />
       </PullToRefresh>
     )

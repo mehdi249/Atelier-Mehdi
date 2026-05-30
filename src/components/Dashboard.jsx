@@ -4,34 +4,31 @@ import SyncModal from './SyncModal'
 import { createEmptyCollection } from '../data/baran'
 import { exportCollectionJSON } from '../utils'
 import { isSupported as fsSupportd } from '../fsStorage'
-import { idbSave } from '../idbStore'
 
 export default function Dashboard({
   collections,
   onOpen,
   onAdd,
   onDelete,
-  syncStatus,
-  syncConfig,
-  onConnectGist,
-  onPullFromGist,
-  onDisconnectGist,
+  serverIP,
+  serverReachable,
+  wifiSyncStatus,
+  onConnectServer,
+  onPullFromServer,
+  onDisconnectServer,
   folderHandle,
   folderStatus,
   onConnectFolder,
   onDisconnectFolder,
-  allState,
-  onImportState,
 }) {
-  const [showAdd, setShowAdd] = useState(false)
-  const [name, setName] = useState('')
-  const [tagline, setTagline] = useState('')
-  const [color, setColor] = useState('#1a1a2e')
-  const [showSync, setShowSync] = useState(false)
+  const [showAdd, setShowAdd]               = useState(false)
+  const [name, setName]                     = useState('')
+  const [tagline, setTagline]               = useState('')
+  const [color, setColor]                   = useState('#1a1a2e')
+  const [showSync, setShowSync]             = useState(false)
   const [showFolderMenu, setShowFolderMenu] = useState(false)
   const [folderConnecting, setFolderConnecting] = useState(false)
-  const folderMenuRef  = useRef(null)
-  const importInputRef = useRef(null)
+  const folderMenuRef = useRef(null)
 
   useEffect(() => {
     if (!showFolderMenu) return
@@ -53,32 +50,6 @@ export default function Dashboard({
     setShowAdd(false)
   }
 
-  function handleExportBackup() {
-    const blob = new Blob([JSON.stringify(allState)], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href = url
-    a.download = `atelier-backup-${new Date().toISOString().slice(0,10)}.json`
-    document.body.appendChild(a); a.click()
-    document.body.removeChild(a); URL.revokeObjectURL(url)
-    setShowFolderMenu(false)
-  }
-
-  function handleImportBackup(file) {
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = e => {
-      try {
-        const data = JSON.parse(e.target.result)
-        if (data?.collections?.length > 0) {
-          onImportState(data)
-          setShowFolderMenu(false)
-        }
-      } catch { alert('Invalid backup file.') }
-    }
-    reader.readAsText(file)
-  }
-
   async function handleConnectFolder() {
     setFolderConnecting(true)
     try { await onConnectFolder() } catch (_) {}
@@ -86,8 +57,8 @@ export default function Dashboard({
     setShowFolderMenu(false)
   }
 
-  const folderName = folderHandle?.name ?? null
-  const folderIcon = folderHandle
+  const folderName  = folderHandle?.name ?? null
+  const folderIcon  = folderHandle
     ? (folderStatus === 'saving' ? '↑' : folderStatus === 'error' ? '!' : '✓')
     : '+'
   const folderTitle = folderHandle
@@ -95,15 +66,16 @@ export default function Dashboard({
     : 'Connect iCloud folder for unlimited storage'
 
   const syncLabel =
-    !syncConfig      ? 'Set up sync' :
-    syncStatus === 'syncing' ? 'Syncing…' :
-    syncStatus === 'error'   ? 'Sync error' :
+    !serverIP                    ? 'Connect to Mac' :
+    !serverReachable             ? 'Mac offline'    :
+    wifiSyncStatus === 'syncing' ? 'Syncing…'       :
+    wifiSyncStatus === 'error'   ? 'Sync error'     :
     'Synced'
 
   const cloudClass =
-    syncStatus === 'synced'  && syncConfig ? 'sync-cloud synced' :
-    syncStatus === 'syncing' && syncConfig ? 'sync-cloud syncing' :
-    syncStatus === 'error'   && syncConfig ? 'sync-cloud error' :
+    serverReachable && wifiSyncStatus === 'synced'  ? 'sync-cloud synced'  :
+    serverReachable && wifiSyncStatus === 'syncing' ? 'sync-cloud syncing' :
+    serverReachable && wifiSyncStatus === 'error'   ? 'sync-cloud error'   :
     'sync-cloud'
 
   return (
@@ -114,7 +86,7 @@ export default function Dashboard({
           <p className="logo-sub">by Mehdi</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* iCloud folder button — always visible, explains if unsupported */}
+          {/* iCloud folder button */}
           <div style={{ position: 'relative' }} ref={folderMenuRef}>
             <button
               className={`folder-btn${folderHandle ? (folderStatus === 'error' ? ' folder-error' : ' folder-connected') : ''}`}
@@ -137,29 +109,11 @@ export default function Dashboard({
                       <span className="folder-menu-value" style={{ color: 'var(--text-muted)' }}>iOS limitation</span>
                     </div>
                     <p className="folder-menu-desc">
-                      Apple doesn't allow web apps to access iCloud Drive folders on iPhone or iPad — this is an iOS restriction, not something we can work around.
+                      Apple doesn't allow web apps to access iCloud Drive folders on iPhone or iPad.
                     </p>
                     <p className="folder-menu-desc" style={{ marginTop: -2 }}>
-                      <strong style={{ color: 'var(--text)' }}>Good news:</strong> your data is now stored in IndexedDB — no more 5 MB limit. Storage is only limited by your device's free space.
+                      <strong style={{ color: 'var(--text)' }}>Your data</strong> is stored in IndexedDB on this device. Use the <strong style={{ color: 'var(--text)' }}>Wi-Fi sync button</strong> to keep everything in sync with your Mac automatically.
                     </p>
-                    <p className="folder-menu-desc" style={{ marginTop: -2 }}>
-                      To move data between devices, use <strong style={{ color: 'var(--text)' }}>Export Backup</strong> below — save the file to iCloud Files and import it on your other device.
-                    </p>
-                    <input
-                      ref={importInputRef}
-                      type="file"
-                      accept=".json"
-                      style={{ display: 'none' }}
-                      onChange={e => { handleImportBackup(e.target.files[0]); e.target.value = '' }}
-                    />
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="folder-menu-action" style={{ flex: 1 }} onClick={handleExportBackup}>
-                        ↓ Export Backup
-                      </button>
-                      <button className="folder-menu-action" style={{ flex: 1 }} onClick={() => importInputRef.current?.click()}>
-                        ↑ Import Backup
-                      </button>
-                    </div>
                     <button className="folder-menu-action" onClick={() => setShowFolderMenu(false)}>Got it</button>
                   </>
                 ) : folderHandle ? (
@@ -196,23 +150,26 @@ export default function Dashboard({
                       onClick={handleConnectFolder}
                       disabled={folderConnecting}
                     >
-                        {folderConnecting ? 'Opening folder picker…' : 'Choose iCloud folder'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
+                      {folderConnecting ? 'Opening folder picker…' : 'Choose iCloud folder'}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Wi-Fi / Mac sync button */}
           <button
             className={cloudClass}
             onClick={() => setShowSync(true)}
             title={syncLabel}
             aria-label={syncLabel}
           >
-            <svg width="22" height="18" viewBox="0 0 24 20" fill="currentColor">
-              <path d="M19.35 7.04A7.49 7.49 0 0 0 12 1C9.11 1 6.6 2.64 5.35 5.04A5.994 5.994 0 0 0 0 11c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
+            <svg width="20" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M1 6.1C3.9 3.4 7.8 2 12 2s8.1 1.4 11 4.1l-2 2C18.8 5.8 15.6 4 12 4S5.2 5.8 3 8.1L1 6.1zm4 4C6.6 8.5 9.2 7 12 7s5.4 1.5 7 3.9l-2 2C15.7 11.1 14 10 12 10s-3.7 1.1-5 2.9l-2-2.8zM12 15a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-3.5-2.5 2 2a2.4 2.4 0 0 1 3 0l2-2a5 5 0 0 0-7 0z"/>
             </svg>
           </button>
+
           <button className="btn-primary" onClick={() => setShowAdd(true)}>+ New Collection</button>
         </div>
       </header>
@@ -254,11 +211,12 @@ export default function Dashboard({
 
       {showSync && (
         <SyncModal
-          syncConfig={syncConfig}
-          syncStatus={syncStatus}
-          onConnect={onConnectGist}
-          onPull={onPullFromGist}
-          onDisconnect={onDisconnectGist}
+          serverIP={serverIP}
+          serverReachable={serverReachable}
+          wifiSyncStatus={wifiSyncStatus}
+          onConnect={onConnectServer}
+          onPull={onPullFromServer}
+          onDisconnect={onDisconnectServer}
           onClose={() => setShowSync(false)}
         />
       )}

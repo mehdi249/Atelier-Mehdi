@@ -1,13 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createBaranTemplate } from './data/baran'
 import {
-  loadSyncConfig,
-  saveSyncConfig,
-  fetchFromGist,
-  pushToGist,
-  createGist,
-} from './sync'
-import {
   isSupported as fsSupportd,
   tryRestoreFolder,
   pickFolder,
@@ -16,6 +9,13 @@ import {
   loadFromFolder,
 } from './fsStorage'
 import { idbLoad, idbSave } from './idbStore'
+import {
+  loadServerIP,
+  saveServerIP,
+  pingServer,
+  pushToServer,
+  pullFromServer,
+} from './wifiSync'
 
 const LS_KEY = 'atelier-mehdi-v1'
 
@@ -33,22 +33,25 @@ function seedState() {
 }
 
 export function useStore() {
-  const [state, setState] = useState(seedState)
-  const [syncConfig, setSyncConfig] = useState(loadSyncConfig)
-  const [syncStatus, setSyncStatus] = useState('idle')
-  const [folderHandle, setFolderHandle] = useState(null)
-  const [folderStatus, setFolderStatus] = useState('idle')
+  const [state, setState]                     = useState(seedState)
+  const [wifiSyncStatus, setWifiSyncStatus]   = useState('idle')
+  const [serverIP, setServerIP]               = useState(loadServerIP)
+  const [serverReachable, setServerReachable] = useState(false)
+  const [folderHandle, setFolderHandle]       = useState(null)
+  const [folderStatus, setFolderStatus]       = useState('idle')
 
-  const stateRef      = useRef(state)
-  const syncConfigRef = useRef(syncConfig)
-  const folderRef     = useRef(null)
-  const skipNextPush  = useRef(false)
-  const idbReady      = useRef(false)  // true once IDB has loaded
+  const stateRef     = useRef(state)
+  const folderRef    = useRef(null)
+  const skipNextPush = useRef(false)
+  const idbReady     = useRef(false)
+  const serverIPRef  = useRef(serverIP)
+  const reachableRef = useRef(false)
+  const uploadedRef  = useRef(new Map())  // filename → fingerprint
 
   useEffect(() => { stateRef.current = state }, [state])
-  useEffect(() => { syncConfigRef.current = syncConfig }, [syncConfig])
+  useEffect(() => { serverIPRef.current = serverIP }, [serverIP])
 
-  // ── On mount: load from IndexedDB (replaces the localStorage seed) ─────────
+  // ── On mount: load from IndexedDB ────────────────────────────────────────────
   useEffect(() => {
     idbLoad().then(data => {
       if (data?.collections?.length > 0) {
@@ -84,42 +87,39 @@ export function useStore() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── On mount: if Gist config, pull from gist ──────────────────────────────
+  // ── On mount: ping server, pull if reachable ──────────────────────────────
   useEffect(() => {
-    const cfg = loadSyncConfig()
-    if (!cfg) return
-    skipNextPush.current = true
-    setSyncStatus('syncing')
-    fetchFromGist(cfg.token, cfg.gistId)
-      .then(data => {
+    const ip = loadServerIP()
+    if (!ip) return
+    pingServer(ip).then(async ok => {
+      reachableRef.current = ok
+      setServerReachable(ok)
+      if (!ok) return
+      setWifiSyncStatus('syncing')
+      try {
+        const data = await pullFromServer(ip, uploadedRef.current)
         if (data?.collections?.length > 0) {
           skipNextPush.current = true
           setState(data)
-        } else {
-          skipNextPush.current = false
         }
-        setSyncStatus('synced')
-      })
-      .catch(err => {
-        console.warn('Gist fetch on mount failed:', err)
-        skipNextPush.current = false
-        setSyncStatus('error')
-      })
+        setWifiSyncStatus('synced')
+      } catch (err) {
+        console.warn('WiFi pull on mount failed:', err)
+        setWifiSyncStatus('error')
+      }
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Persist to IndexedDB on every state change (primary store) ────────────
+  // ── Persist to IndexedDB on every state change ────────────────────────────
   useEffect(() => {
-    if (!idbReady.current) return   // don't overwrite IDB before we've read it
+    if (!idbReady.current) return
     idbSave(stateRef.current)
-    // Also keep a lean localStorage copy as a fast seed for next page load
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(stateRef.current))
-    } catch (_) {}
+    try { localStorage.setItem(LS_KEY, JSON.stringify(stateRef.current)) } catch (_) {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 
-  // ── Debounced save to iCloud folder on state change ───────────────────────
+  // ── Debounced save to iCloud folder ──────────────────────────────────────
   useEffect(() => {
     const handle = folderRef.current
     if (!handle) return
@@ -127,58 +127,65 @@ export function useStore() {
     const timer = setTimeout(() => {
       saveToFolder(handle, stateRef.current)
         .then(() => setFolderStatus('saved'))
-        .catch(err => {
-          console.warn('Folder save failed:', err)
-          setFolderStatus('error')
-        })
+        .catch(err => { console.warn('Folder save failed:', err); setFolderStatus('error') })
     }, 2000)
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 
-  // ── Debounced Gist push on state change ───────────────────────────────────
+  // ── Debounced WiFi push on state change ───────────────────────────────────
   useEffect(() => {
-    const cfg = syncConfigRef.current
-    if (!cfg) return
+    if (!reachableRef.current) return
     if (skipNextPush.current) { skipNextPush.current = false; return }
-    setSyncStatus('syncing')
+    const ip = serverIPRef.current
+    if (!ip) return
+    setWifiSyncStatus('syncing')
     const timer = setTimeout(() => {
-      pushToGist(cfg.token, cfg.gistId, stateRef.current)
-        .then(() => setSyncStatus('synced'))
-        .catch(err => { console.warn('Gist push failed:', err); setSyncStatus('error') })
+      pushToServer(ip, stateRef.current, uploadedRef.current)
+        .then(() => setWifiSyncStatus('synced'))
+        .catch(err => { console.warn('WiFi push failed:', err); setWifiSyncStatus('error') })
     }, 2500)
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 
-  // ── Gist callbacks ────────────────────────────────────────────────────────
+  // ── WiFi callbacks ────────────────────────────────────────────────────────
 
-  const connectGist = useCallback(async (token, existingGistId) => {
-    let gistId = existingGistId?.trim() || null
-    if (gistId) {
-      const data = await fetchFromGist(token, gistId)
-      if (data?.collections?.length > 0) { skipNextPush.current = true; setState(data) }
-    } else {
-      gistId = await createGist(token, stateRef.current)
-    }
-    const cfg = { token, gistId }
-    saveSyncConfig(cfg); setSyncConfig(cfg); setSyncStatus('synced')
-    return { gistId }
-  }, [])
-
-  const pullFromGist = useCallback(async () => {
-    const cfg = syncConfigRef.current
-    if (!cfg) return
-    setSyncStatus('syncing')
+  const connectServer = useCallback(async (ip) => {
+    const ok = await pingServer(ip)
+    if (!ok) throw new Error(`Server not reachable at ${ip}`)
+    saveServerIP(ip)
+    setServerIP(ip)
+    serverIPRef.current  = ip
+    reachableRef.current = true
+    setServerReachable(true)
+    setWifiSyncStatus('syncing')
     try {
-      const data = await fetchFromGist(cfg.token, cfg.gistId)
+      const data = await pullFromServer(ip, uploadedRef.current)
       if (data?.collections?.length > 0) { skipNextPush.current = true; setState(data) }
-      setSyncStatus('synced')
-    } catch (err) { console.warn('Manual pull failed:', err); setSyncStatus('error') }
+      setWifiSyncStatus('synced')
+    } catch { setWifiSyncStatus('error') }
   }, [])
 
-  const disconnectGist = useCallback(() => {
-    saveSyncConfig(null); setSyncConfig(null); setSyncStatus('idle')
+  const disconnectServer = useCallback(() => {
+    saveServerIP(null)
+    setServerIP(null)
+    serverIPRef.current  = null
+    reachableRef.current = false
+    setServerReachable(false)
+    setWifiSyncStatus('idle')
+    uploadedRef.current  = new Map()
+  }, [])
+
+  const pullFromServerNow = useCallback(async () => {
+    const ip = serverIPRef.current
+    if (!ip) return
+    setWifiSyncStatus('syncing')
+    try {
+      const data = await pullFromServer(ip, uploadedRef.current)
+      if (data?.collections?.length > 0) { skipNextPush.current = true; setState(data) }
+      setWifiSyncStatus('synced')
+    } catch (err) { console.warn('Manual pull failed:', err); setWifiSyncStatus('error') }
   }, [])
 
   // ── Folder callbacks ──────────────────────────────────────────────────────
@@ -224,16 +231,16 @@ export function useStore() {
 
   return {
     state,
-    setState,
     updateCollection,
     updateStage,
     addCollection,
     deleteCollection,
-    syncConfig,
-    syncStatus,
-    connectGist,
-    pullFromGist,
-    disconnectGist,
+    serverIP,
+    serverReachable,
+    wifiSyncStatus,
+    connectServer,
+    disconnectServer,
+    pullFromServerNow,
     folderHandle,
     folderStatus,
     connectFolder,
