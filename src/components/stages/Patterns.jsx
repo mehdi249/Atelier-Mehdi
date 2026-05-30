@@ -1,0 +1,546 @@
+import React, { useState, useRef, useEffect } from 'react'
+import { generateId, compressImage } from '../../utils'
+import { renderAllPages, getFileCategory } from '../../filePreview'
+import { dxfToSvg } from '../../dxfRenderer'
+
+const STAGES = [
+  { key: 'draft',  label: 'Draft',  color: '#636366' },
+  { key: 'fitted', label: 'Fitted', color: '#5e9eca' },
+  { key: 'final',  label: 'Final',  color: '#c9a96e' },
+]
+
+const ADD_OPTIONS = [
+  { key: 'pdf',   label: 'Import PDF / AI / SVG', accept: '.pdf,.ai,.svg' },
+  { key: 'dxf',   label: 'Import DXF',            accept: '.dxf' },
+  { key: 'clo3d', label: 'Import CLO3D (.zprj)',   accept: '.zprj' },
+  { key: 'opf',   label: 'Import Optitex (.opf)',  accept: '.opf' },
+  { key: 'image', label: 'Import Image',           accept: 'image/*' },
+]
+
+function createVersion(num) {
+  return {
+    id: generateId(),
+    versionNum: num,
+    src: null,
+    pages: [],
+    pageCount: 0,
+    fileCategory: null,
+    nativeName: null,
+    note: '',
+    createdAt: Date.now(),
+  }
+}
+
+function createPiece(name = 'Pattern Piece') {
+  return {
+    id: generateId(),
+    name,
+    stage: 'draft',
+    sizeRange: '',
+    seamAllowance: '',
+    gradingNotes: '',
+    versions: [],
+    coverVersionId: null,
+  }
+}
+
+// ── FILE PROCESSING ──────────────────────────────────────────────────────────
+
+async function processFile(file, versionNum) {
+  const ext = file.name.split('.').pop().toLowerCase()
+
+  if (ext === 'zprj' || ext === 'opf') {
+    return { ...createVersion(versionNum), fileCategory: ext, nativeName: file.name }
+  }
+
+  if (ext === 'dxf') {
+    const text = await file.text()
+    const src = dxfToSvg(text)
+    return {
+      ...createVersion(versionNum),
+      fileCategory: 'dxf',
+      src,
+      pages: src ? [src] : [],
+      pageCount: src ? 1 : 0,
+    }
+  }
+
+  const cat = getFileCategory(file)
+  if (cat === 'image') {
+    const src = await compressImage(file)
+    return { ...createVersion(versionNum), fileCategory: 'image', src, pages: [src], pageCount: 1 }
+  }
+
+  const pages = await renderAllPages(file, 1200)
+  return {
+    ...createVersion(versionNum),
+    fileCategory: cat,
+    src: pages[0] ?? null,
+    pages,
+    pageCount: pages.length,
+  }
+}
+
+// ── ADD PATTERN MENU ─────────────────────────────────────────────────────────
+
+function AddPatternMenu({ onAdd }) {
+  const [open, setOpen]       = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [accept, setAccept]   = useState('')
+  const menuRef  = useRef(null)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function close(e) { if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  function pick(acceptStr) {
+    setAccept(acceptStr)
+    setOpen(false)
+    setTimeout(() => inputRef.current?.click(), 30)
+  }
+
+  async function handleFiles(files) {
+    setLoading(true)
+    for (const file of Array.from(files)) {
+      const version = await processFile(file, 1)
+      const piece = {
+        ...createPiece(file.name.replace(/\.[^.]+$/, '')),
+        versions: [version],
+        coverVersionId: version.id,
+      }
+      onAdd(piece)
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="pt-add-wrap" ref={menuRef}>
+      <input ref={inputRef} type="file" multiple accept={accept} style={{ display: 'none' }}
+        onChange={e => { handleFiles(e.target.files); e.target.value = '' }} />
+      <button className="btn-primary-sm" disabled={loading} onClick={() => setOpen(o => !o)}>
+        {loading ? 'Importing…' : '+ Add Pattern ▾'}
+      </button>
+      {open && (
+        <div className="pt-add-menu">
+          {ADD_OPTIONS.map(o => (
+            <button key={o.key} onClick={() => pick(o.accept)}>{o.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── NATIVE FILE BADGE ────────────────────────────────────────────────────────
+
+function NativeBadge({ filename }) {
+  const ext   = filename?.split('.').pop()?.toLowerCase()
+  const label = ext === 'zprj' ? 'Open in CLO3D' : ext === 'opf' ? 'Open in Optitex' : 'Native file'
+  return (
+    <div className="pt-native-badge">
+      <span className="pt-native-icon">⬢</span>
+      <div className="pt-native-text">
+        <span className="pt-native-label">Native file — {label}</span>
+        <span className="pt-native-name">{filename}</span>
+      </div>
+    </div>
+  )
+}
+
+// ── VERSION THUMBNAIL ────────────────────────────────────────────────────────
+
+function VersionThumb({ version, isActive, onClick }) {
+  return (
+    <button
+      className={`pt-ver-thumb${isActive ? ' active' : ''}`}
+      onClick={e => { e.stopPropagation(); onClick(version.id) }}
+      title={`v${version.versionNum}${version.note ? ': ' + version.note : ''}`}
+    >
+      <div className="pt-ver-thumb-img">
+        {version.src
+          ? <img src={version.src} alt="" />
+          : version.nativeName
+            ? <span className="pt-ver-native-icon">⬢</span>
+            : <span className="pt-ver-empty-icon">—</span>
+        }
+      </div>
+      <span className="pt-ver-thumb-label">v{version.versionNum}</span>
+    </button>
+  )
+}
+
+// ── PATTERN CARD ─────────────────────────────────────────────────────────────
+
+function PatternCard({ piece, pieceNum, activeVersionId, onSelectVersion, onClick }) {
+  const stage       = STAGES.find(s => s.key === piece.stage) ?? STAGES[0]
+  const coverVer    = piece.versions.find(v => v.id === piece.coverVersionId) ?? piece.versions[0]
+
+  return (
+    <div
+      className={`tp-piece-card${activeVersionId ? ' selected' : ''}`}
+      onClick={onClick}
+    >
+      {/* Header */}
+      <div className="tp-piece-card-header">
+        <span className="tp-piece-card-label">Pattern | PIECE {String(pieceNum).padStart(2, '0')}</span>
+        <span className="tp-piece-card-name">{piece.name}</span>
+        <span className="pt-stage-pill" style={{ color: stage.color, borderColor: stage.color + '55' }}>
+          {stage.label}
+        </span>
+        {piece.versions.length > 0 && (
+          <span className="pt-ver-count">{piece.versions.length}v</span>
+        )}
+      </div>
+
+      {/* Body */}
+      <div className="tp-piece-card-body">
+        {/* Left: version thumbnails */}
+        <div className="tp-piece-card-left">
+          {piece.versions.length > 0
+            ? piece.versions.map(v => (
+                <VersionThumb
+                  key={v.id}
+                  version={v}
+                  isActive={v.id === activeVersionId}
+                  onClick={vId => onSelectVersion(piece.id, vId)}
+                />
+              ))
+            : <div className="tp-piece-card-left-empty"><span>No versions</span></div>
+          }
+        </div>
+
+        {/* Right: cover preview */}
+        <div className="tp-piece-card-right">
+          {coverVer?.src
+            ? <img src={coverVer.src} alt={piece.name} className="tp-piece-card-sketch" />
+            : coverVer?.nativeName
+              ? <NativeBadge filename={coverVer.nativeName} />
+              : (
+                <div className="tp-piece-cover-empty">
+                  <span className="tp-piece-cover-plus">+</span>
+                  <span className="tp-piece-cover-hint">Upload pattern</span>
+                </div>
+              )
+          }
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── DETAIL PANEL ─────────────────────────────────────────────────────────────
+
+function PatternDetailPanel({ piece, pieceNum, activeVersionId, onUpdate, onDelete, onClose }) {
+  const [pageIdx,     setPageIdx]     = useState(0)
+  const [addLoading,  setAddLoading]  = useState(false)
+  const inputRef = useRef(null)
+
+  const activeVer = piece.versions.find(v => v.id === activeVersionId) ?? piece.versions[0]
+  const pages     = activeVer?.pages ?? []
+  const hasPages  = pages.length > 1
+  const showDots  = hasPages && pages.length <= 10
+
+  useEffect(() => setPageIdx(0), [activeVersionId])
+
+  function set(field, value) { onUpdate({ ...piece, [field]: value }) }
+
+  function setVer(id, fields) {
+    onUpdate({ ...piece, versions: piece.versions.map(v => v.id === id ? { ...v, ...fields } : v) })
+  }
+
+  async function addVersion(files) {
+    setAddLoading(true)
+    for (const file of Array.from(files)) {
+      const nextNum = (piece.versions[piece.versions.length - 1]?.versionNum ?? 0) + 1
+      const ver = await processFile(file, nextNum)
+      onUpdate({
+        ...piece,
+        versions: [...piece.versions, ver],
+        coverVersionId: piece.coverVersionId ?? ver.id,
+      })
+    }
+    setAddLoading(false)
+  }
+
+  function setCover() {
+    if (!activeVer) return
+    const coverSrc = hasPages ? pages[pageIdx] : activeVer.src
+    onUpdate({
+      ...piece,
+      coverVersionId: activeVer.id,
+      versions: piece.versions.map(v => v.id === activeVer.id ? { ...v, src: coverSrc } : v),
+    })
+  }
+
+  function removeVersion(id) {
+    const remaining = piece.versions.filter(v => v.id !== id)
+    onUpdate({
+      ...piece,
+      versions: remaining,
+      coverVersionId: remaining.length
+        ? piece.coverVersionId === id ? remaining[0].id : piece.coverVersionId
+        : null,
+    })
+  }
+
+  const isCover = piece.coverVersionId === activeVer?.id
+
+  return (
+    <>
+      <div className="tp-detail-backdrop" onClick={onClose} />
+      <div className="tp-detail">
+
+        {/* Header */}
+        <div className="tp-detail-header">
+          <div className="tp-detail-header-left">
+            <span className="tp-detail-label">Pattern | PIECE {String(pieceNum).padStart(2, '0')}</span>
+            <input
+              className="tp-detail-name-input"
+              value={piece.name}
+              onChange={e => set('name', e.target.value)}
+            />
+          </div>
+          <button className="tp-detail-close" onClick={onClose}>×</button>
+        </div>
+
+        {/* Preview */}
+        <div className={`tp-sketch-panel${activeVer?.src || pages.length ? ' tp-sketch-panel-filled' : activeVer?.nativeName ? '' : ' tp-sketch-panel-empty'}`}
+          style={{ minHeight: 240 }}
+          onClick={(!activeVer?.src && !activeVer?.nativeName && pages.length === 0) ? () => inputRef.current?.click() : undefined}
+        >
+          {activeVer?.nativeName ? (
+            <NativeBadge filename={activeVer.nativeName} />
+          ) : activeVer?.src || pages.length ? (
+            <>
+              {hasPages && (
+                <div className="tp-sketch-panel-counter">Page {pageIdx + 1} of {pages.length}</div>
+              )}
+              <img
+                src={hasPages ? pages[pageIdx] : activeVer.src}
+                alt={piece.name}
+                className="tp-sketch-panel-img"
+              />
+              {hasPages && pageIdx > 0 && (
+                <button className="tp-sketch-panel-arrow tp-sketch-panel-prev" onClick={() => setPageIdx(i => i - 1)}>‹</button>
+              )}
+              {hasPages && pageIdx < pages.length - 1 && (
+                <button className="tp-sketch-panel-arrow tp-sketch-panel-next" onClick={() => setPageIdx(i => i + 1)}>›</button>
+              )}
+              {showDots && (
+                <div className="tp-sketch-panel-dots">
+                  {pages.map((_, i) => (
+                    <button key={i}
+                      className={`tp-sketch-panel-dot${i === pageIdx ? ' active' : ''}`}
+                      onClick={() => setPageIdx(i)} />
+                  ))}
+                </div>
+              )}
+              <div className="tp-sketch-panel-actions">
+                <button
+                  className={`tp-sketch-panel-cover-btn${isCover ? ' is-cover' : ''}`}
+                  onClick={setCover}
+                >
+                  {isCover ? '✓ Cover' : 'Set as Cover'}
+                </button>
+                {activeVer && (
+                  <button className="tp-sketch-panel-remove-btn" onClick={() => removeVersion(activeVer.id)}>
+                    Remove
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 28, color: 'var(--text-dim)', fontWeight: 200 }}>+</span>
+              <span style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+                Upload pattern
+              </span>
+              <span style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2 }}>
+                PDF · DXF · AI · SVG · Image
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Version note */}
+        {activeVer && (
+          <div className="pt-ver-note-row">
+            <textarea
+              className="input"
+              rows={2}
+              style={{ width: '100%', resize: 'none', fontSize: 12 }}
+              placeholder="Version notes…"
+              value={activeVer.note}
+              onChange={e => setVer(activeVer.id, { note: e.target.value })}
+            />
+          </div>
+        )}
+
+        <div className="tp-detail-scroll">
+
+          {/* Stage */}
+          <div className="tp-detail-section">
+            <div className="tp-section-label">Stage</div>
+            <div className="pt-stage-row">
+              {STAGES.map(s => (
+                <button
+                  key={s.key}
+                  className="pt-stage-btn"
+                  style={{
+                    borderColor:  piece.stage === s.key ? s.color : 'var(--border)',
+                    color:        piece.stage === s.key ? s.color : 'var(--text-muted)',
+                    background:   piece.stage === s.key ? s.color + '18' : 'transparent',
+                  }}
+                  onClick={() => set('stage', s.key)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Fields */}
+          <div className="tp-detail-fields">
+            <div>
+              <label className="tp-field-label">Size Range</label>
+              <input className="input" value={piece.sizeRange}
+                onChange={e => set('sizeRange', e.target.value)} placeholder="XS – XL" />
+            </div>
+            <div>
+              <label className="tp-field-label">Seam Allowance</label>
+              <input className="input" value={piece.seamAllowance}
+                onChange={e => set('seamAllowance', e.target.value)} placeholder="1 cm" />
+            </div>
+          </div>
+
+          {/* Grading notes */}
+          <div className="tp-detail-section">
+            <label className="tp-field-label">Grading Notes</label>
+            <textarea className="input" rows={3}
+              style={{ width: '100%', resize: 'none', fontSize: 12 }}
+              value={piece.gradingNotes}
+              onChange={e => set('gradingNotes', e.target.value)}
+              placeholder="Grading rules, ease, construction notes…"
+            />
+          </div>
+
+          {/* Versions list */}
+          <div className="tp-detail-section">
+            <div className="tp-section-label">Versions</div>
+            <div className="pt-ver-list">
+              {piece.versions.map(v => (
+                <div key={v.id} className={`pt-ver-row${v.id === activeVersionId ? ' active' : ''}`}>
+                  <div className="pt-ver-row-thumb">
+                    {v.src
+                      ? <img src={v.src} alt="" />
+                      : v.nativeName
+                        ? <span style={{ fontSize: 14 }}>⬢</span>
+                        : null}
+                  </div>
+                  <span className="pt-ver-row-num">v{v.versionNum}</span>
+                  <span className="pt-ver-row-note">
+                    {v.note || v.nativeName || (v.fileCategory === 'dxf' ? 'DXF pattern' : `${v.fileCategory ?? ''} file`)}
+                  </span>
+                  {v.id === piece.coverVersionId && (
+                    <span className="pt-ver-row-cover">COVER</span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <input ref={inputRef} type="file" multiple
+              accept=".pdf,.ai,.svg,.dxf,.zprj,.opf,image/*"
+              style={{ display: 'none' }}
+              onChange={e => { addVersion(e.target.files); e.target.value = '' }}
+            />
+            <button
+              className="btn-ghost-sm"
+              style={{ marginTop: 8, width: '100%' }}
+              onClick={() => inputRef.current?.click()}
+              disabled={addLoading}
+            >
+              {addLoading ? 'Importing…' : '+ Add Version'}
+            </button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="tp-detail-footer">
+          <button className="btn-danger-sm" onClick={onDelete}>Delete piece</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── MAIN EXPORT ───────────────────────────────────────────────────────────────
+
+export default function Patterns({ data, onChange }) {
+  const pieces = data.pieces ?? []
+  const [selectedPieceId,   setSelectedPieceId]   = useState(null)
+  const [selectedVersionId, setSelectedVersionId] = useState(null)
+
+  function updatePieces(next) { onChange({ ...data, pieces: next }) }
+  function addPiece(piece)     { updatePieces([...pieces, piece]) }
+  function updatePiece(id, p)  { updatePieces(pieces.map(x => x.id === id ? p : x)) }
+  function deletePiece(id) {
+    updatePieces(pieces.filter(p => p.id !== id))
+    if (selectedPieceId === id) { setSelectedPieceId(null); setSelectedVersionId(null) }
+  }
+
+  function handleSelectVersion(pieceId, verId) {
+    setSelectedPieceId(pieceId)
+    setSelectedVersionId(verId)
+  }
+
+  const selectedPiece = pieces.find(p => p.id === selectedPieceId)
+
+  return (
+    <div className="tp-workspace">
+      <div className="tp-toolbar">
+        <span className="tp-title">Patterns</span>
+        <AddPatternMenu onAdd={addPiece} />
+      </div>
+
+      <div className="tp-body">
+        {pieces.length === 0 ? (
+          <div className="pt-empty">
+            <span className="pt-empty-icon">◫</span>
+            <p>No pattern pieces yet</p>
+            <p className="pt-empty-sub">Import a PDF, DXF, CLO3D, or image file to get started</p>
+          </div>
+        ) : (
+          <div className="tp-grid">
+            {pieces.map((piece, i) => (
+              <PatternCard
+                key={piece.id}
+                piece={piece}
+                pieceNum={i + 1}
+                activeVersionId={piece.id === selectedPieceId ? selectedVersionId : null}
+                onSelectVersion={handleSelectVersion}
+                onClick={() => {
+                  setSelectedPieceId(piece.id)
+                  setSelectedVersionId(piece.versions[0]?.id ?? null)
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {selectedPiece && (
+        <PatternDetailPanel
+          piece={selectedPiece}
+          pieceNum={pieces.indexOf(selectedPiece) + 1}
+          activeVersionId={selectedVersionId}
+          onUpdate={p => updatePiece(selectedPiece.id, p)}
+          onDelete={() => deletePiece(selectedPiece.id)}
+          onClose={() => { setSelectedPieceId(null); setSelectedVersionId(null) }}
+        />
+      )}
+    </div>
+  )
+}

@@ -3,6 +3,7 @@ import MindMap from './stages/MindMap'
 import Research from './stages/Research'
 import Sketches from './stages/Sketches'
 import StyleCards from './stages/StyleCards'
+import Patterns from './stages/Patterns'
 import GenericStage from './stages/GenericStage'
 import Lookbook from './stages/Lookbook'
 import { exportCollectionJSON, exportMindMapSVG } from '../utils'
@@ -68,7 +69,7 @@ export default function ProjectView({ collection, onUpdate, onUpdateStage, onDel
       case 'research':     return <Research data={stageData} onChange={update} />
       case 'sketches':     return <Sketches data={stageData} onChange={update} />
       case 'styleCards':   return <StyleCards data={stageData} onChange={update} />
-      case 'patterns':     return <GenericStage title="Patterns" data={stageData} onChange={update} />
+      case 'patterns':     return <Patterns data={stageData} onChange={update} />
       case 'clo3d':        return <GenericStage title="CLO3D" data={stageData} onChange={update} />
       case 'construction': return <GenericStage title="Construction" data={stageData} onChange={update} />
       case 'lookbook':     return <Lookbook data={stageData} onChange={update} />

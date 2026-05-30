@@ -211,7 +211,7 @@ export function createBaranTemplate() {
           },
         ]
       },
-      patterns: { notes: '', images: [] },
+      patterns: { notes: '', pieces: [] },
       clo3d: { notes: '', images: [] },
       construction: { notes: '', images: [] },
       lookbook: { notes: '', images: [] }
@@ -231,7 +231,7 @@ export function createEmptyCollection() {
       research: { narrative: '', urls: [], images: [], references: [], insights: [], directions: [] },
       sketches: { notes: '', images: [], cards: [] },
       styleCards: { notes: '', pieces: [] },
-      patterns: { notes: '', images: [] },
+      patterns: { notes: '', pieces: [] },
       clo3d: { notes: '', images: [] },
       construction: { notes: '', images: [] },
       lookbook: { notes: '', images: [] }
